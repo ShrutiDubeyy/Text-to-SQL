@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Upload Data</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #0f172a;
+           color: #e2e8f0; min-height: 100vh; padding: 40px 24px; }
+
+    .container { max-width: 800px; margin: 0 auto; }
+
+    header { display: flex; justify-content: space-between;
+             align-items: center; margin-bottom: 40px; }
+    header h1 { color: #60a5fa; font-size: 22px; }
+    .nav-links a { color: #94a3b8; text-decoration: none;
+                   font-size: 14px; margin-left: 20px; }
+    .nav-links a:hover { color: #60a5fa; }
+
+    .card { background: #1e293b; border: 1px solid #334155;
+            border-radius: 12px; padding: 28px; margin-bottom: 24px; }
+    .card h2 { color: #e2e8f0; font-size: 16px;
+               margin-bottom: 20px; }
+
+    .upload-area { border: 2px dashed #334155; border-radius: 8px;
+                   padding: 40px; text-align: center;
+                   cursor: pointer; transition: all 0.2s; }
+    .upload-area:hover { border-color: #3b82f6;
+                         background: rgba(59,130,246,0.05); }
+    .upload-area.dragover { border-color: #3b82f6;
+                            background: rgba(59,130,246,0.1); }
+
+    .upload-icon { font-size: 40px; margin-bottom: 12px; }
+    .upload-text { color: #94a3b8; font-size: 14px; }
+    .upload-text strong { color: #60a5fa; }
+
+    input[type="file"] { display: none; }
+
+    .form-group { margin-top: 16px; }
+    .form-group label { display: block; font-size: 13px;
+                        color: #94a3b8; margin-bottom: 6px; }
+    .form-group input { width: 100%; padding: 10px 14px;
+                        background: #0f172a; border: 1px solid #334155;
+                        color: white; border-radius: 6px;
+                        font-size: 14px; outline: none; }
+    .form-group input:focus { border-color: #3b82f6; }
+
+    .btn { padding: 12px 24px; background: #3b82f6; color: white;
+           border: none; border-radius: 8px; cursor: pointer;
+           font-size: 14px; font-weight: 600; margin-top: 16px;
+           width: 100%; }
+    .btn:hover { background: #2563eb; }
+    .btn:disabled { background: #334155; cursor: not-allowed; }
+
+    .msg { padding: 12px 16px; border-radius: 8px;
+           font-size: 14px; margin-top: 16px; display: none; }
+    .msg.success { background: #1a3a2a; color: #34d399;
+                   border: 1px solid #065f46; }
+    .msg.error   { background: #3a1a1a; color: #f87171;
+                   border: 1px solid #7f1d1d; }
+
+    /* Tables list */
+    .table-grid { display: grid;
+                  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                  gap: 12px; }
+    .table-card { background: #0f172a; border: 1px solid #334155;
+                  border-radius: 8px; padding: 16px; }
+    .table-name { color: #60a5fa; font-size: 14px;
+                  font-weight: 600; margin-bottom: 4px; }
+    .table-rows { color: #64748b; font-size: 12px; }
+
+    .selected-file { background: #0f2744; border: 1px solid #1e3a5f;
+                     border-radius: 6px; padding: 10px 14px;
+                     font-size: 13px; color: #93c5fd;
+                     margin-top: 12px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📁 Data Manager</h1>
+      <div class="nav-links">
+        <a href="/">💬 Chat</a>
+        <a href="/logout">Logout</a>
+      </div>
+    </header>
+
+    <!-- Upload Card -->
+    <div class="card">
+      <h2>Upload New Dataset</h2>
+
+      <div class="upload-area" id="upload-area"
+           onclick="document.getElementById('file-input').click()"
+           ondragover="handleDragOver(event)"
+           ondragleave="handleDragLeave(event)"
+           ondrop="handleDrop(event)">
+        <div class="upload-icon">📊</div>
+        <div class="upload-text">
+          <strong>Click to upload</strong> or drag and drop<br/>
+          CSV or Excel files supported
+        </div>
+      </div>
+
+      <input type="file" id="file-input"
+             accept=".csv,.xlsx,.xls"
+             onchange="handleFileSelect(event)"/>
+
+      <div class="selected-file" id="selected-file"></div>
+
+      <div class="form-group">
+        <label>Table Name (optional — auto generated if empty)</label>
+        <input type="text" id="table-name"
+               placeholder="e.g. customers, products, sales_2024"/>
+      </div>
+
+      <div class="msg" id="msg"></div>
+
+      <button class="btn" id="upload-btn"
+              onclick="uploadFile()" disabled>
+        Upload & Load to Database
+      </button>
+    </div>
+
+    <!-- Existing Tables -->
+    <div class="card">
+      <h2>📋 Loaded Tables</h2>
+      <div class="table-grid" id="table-grid">
+        <div style="color:#64748b;font-size:13px;">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let selectedFile = null
+
+    // Load tables on page load
+    window.onload = loadTables
+
+    async function loadTables() {
+      const res = await fetch('/tables')
+      const data = await res.json()
+      const grid = document.getElementById('table-grid')
+
+      if (!data.tables || data.tables.length === 0) {
+        grid.innerHTML =
+          '<div style="color:#64748b;font-size:13px;">No tables loaded yet</div>'
+        return
+      }
+
+      grid.innerHTML = data.tables.map(t => `
+        <div class="table-card">
+          <div class="table-name">📊 ${t.name}</div>
+          <div class="table-rows">${t.rows.toLocaleString()} rows</div>
+        </div>
+      `).join('')
+    }
+
+    function handleFileSelect(event) {
+      selectedFile = event.target.files[0]
+      showSelectedFile()
+    }
+
+    function handleDragOver(event) {
+      event.preventDefault()
+      document.getElementById('upload-area').classList.add('dragover')
+    }
+
+    function handleDragLeave(event) {
+      document.getElementById('upload-area').classList.remove('dragover')
+    }
+
+    function handleDrop(event) {
+      event.preventDefault()
+      document.getElementById('upload-area').classList.remove('dragover')
+      selectedFile = event.dataTransfer.files[0]
+      showSelectedFile()
+    }
+
+    function showSelectedFile() {
+      if (!selectedFile) return
+      const el = document.getElementById('selected-file')
+      el.textContent = `Selected: ${selectedFile.name} (${(selectedFile.size/1024).toFixed(1)} KB)`
+      el.style.display = 'block'
+      document.getElementById('upload-btn').disabled = false
+    }
+
+    async function uploadFile() {
+      if (!selectedFile) return
+
+      const btn = document.getElementById('upload-btn')
+      const msg = document.getElementById('msg')
+      const tableName = document.getElementById('table-name').value
+
+      btn.disabled = true
+      btn.textContent = 'Uploading...'
+      msg.style.display = 'none'
+
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('table_name', tableName)
+
+      try {
+        const res = await fetch('/upload', {
+          method: 'POST',
+          body: formData
+        })
+        const data = await res.json()
+
+        msg.style.display = 'block'
+        if (data.success) {
+          msg.className = 'msg success'
+          msg.textContent =
+            `✅ ${data.message} — You can now ask questions about this data!`
+          loadTables()
+
+          // Reset form
+          selectedFile = null
+          document.getElementById('file-input').value = ''
+          document.getElementById('table-name').value = ''
+          document.getElementById('selected-file').style.display = 'none'
+        } else {
+          msg.className = 'msg error'
+          msg.textContent = `❌ ${data.error}`
+        }
+
+      } catch (err) {
+        msg.style.display = 'block'
+        msg.className = 'msg error'
+        msg.textContent = '❌ Upload failed. Please try again.'
+      } finally {
+        btn.disabled = false
+        btn.textContent = 'Upload & Load to Database'
+      }
+    }
+  </script>
+</body>
+</html>

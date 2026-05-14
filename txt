@@ -1,0 +1,90 @@
+USER TYPES: "What is total revenue?"
+        │
+        ▼
+   BROWSER (chat.html)
+   JavaScript sends HTTP POST to Flask
+   {"question": "What is total revenue?"}
+        │
+        ▼
+   FLASK (app.py)
+   Receives the question
+        │
+        ▼
+   LLM CALL 1 — Intent Detection (Groq)
+   "Is this casual or data question?"
+        │
+        ├── CASUAL → LLM replies naturally → Back to User
+        │
+        └── DATA QUESTION ↓
+                │
+                ▼
+   LLM CALL 2 — SQL Generation (Groq)
+   "Convert question to MySQL query"
+   Returns: SELECT SUM(line_total) FROM sales_data
+                │
+                ▼
+   MYSQL (sql_executor.py)
+   Runs the SQL query via TCP on port 3306
+   Scans 64,104 rows
+   Returns raw result: 1235968899.00
+                │
+                ▼
+   LLM CALL 3 — Explain Results (Groq)
+   "Explain this number in plain English"
+   Returns: "Total revenue is $1.23 billion"
+                │
+                ▼
+   LLM CALL 4 — Follow-up Questions (Groq)
+   "What might user ask next?"
+   Returns: ["What about 2024?", ...]
+                │
+                ▼
+   FLASK sends JSON back to Browser
+   {answer, sql, followups}
+                │
+                ▼
+   BROWSER (chat.html)
+   Displays answer + SQL box + follow-up chips
+                │
+                ▼
+   USER SEES: "Total revenue is $1.23 billion"
+
+
+   User Question
+      ↓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LAYER 1 — YOUR OWN BRAIN (Python)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ├── YOUR rule engine classifies 70% of questions
+  ├── YOUR SQL builder handles standard queries
+  ├── YOUR cache returns instant answers
+  └── YOUR analytics computes stats
+      ↓ (only 30% unclear questions go here)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LAYER 2 — LLM FALLBACK (Groq/Gemini/OpenAI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ├── Groq (primary)
+  ├── Gemini (backup)
+  └── OpenAI (last resort)
+      ↓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LAYER 3 — YOUR OWN VALIDATOR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ├── SQL safety checker
+  ├── Result validator
+  └── Error corrector
+      ↓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LAYER 4 — YOUR OWN ANALYTICS ENGINE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ├── Statistical analysis (YOUR Python)
+  ├── Trend detection (YOUR algorithm)
+  ├── Anomaly detection (YOUR logic)
+  └── Smart insights (YOUR rules)
+      ↓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LAYER 5 — YOUR OWN PRESENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ├── Chart selection (YOUR data science)
+  ├── Number formatting (YOUR rules)
+  └── Story building (YOUR templates)

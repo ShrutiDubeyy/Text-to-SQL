@@ -1,0 +1,11 @@
+flask
+flask-login
+flask-bcrypt
+google-generativeai
+pandas
+openpyxl
+sqlalchemy
+mysql-connector-python
+python-dotenv
+apscheduler
+PyJWT

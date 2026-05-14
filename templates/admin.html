@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Panel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #0f172a;
+           color: #e2e8f0; min-height: 100vh; }
+
+    header { background: #1e293b; padding: 16px 24px;
+             display: flex; justify-content: space-between;
+             align-items: center;
+             border-bottom: 1px solid #334155; }
+    header h1 { color: #f59e0b; font-size: 18px; }
+    .nav a { color: #94a3b8; text-decoration: none;
+             font-size: 14px; margin-left: 20px; }
+    .nav a:hover { color: #60a5fa; }
+
+    .container { max-width: 1200px; margin: 0 auto;
+                 padding: 32px 24px; }
+
+    .tabs { display: flex; gap: 4px; margin-bottom: 24px;
+            border-bottom: 1px solid #334155; }
+    .tab { padding: 10px 20px; cursor: pointer;
+           font-size: 14px; color: #64748b;
+           border-bottom: 2px solid transparent;
+           margin-bottom: -1px; transition: all 0.2s; }
+    .tab.active { color: #60a5fa;
+                  border-bottom-color: #60a5fa; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .stats { display: grid;
+             grid-template-columns: repeat(4, 1fr);
+             gap: 16px; margin-bottom: 32px; }
+    .stat-card { background: #1e293b;
+                 border: 1px solid #334155;
+                 border-radius: 12px; padding: 20px; }
+    .stat-value { font-size: 28px; font-weight: 700;
+                  color: #60a5fa; margin-bottom: 4px; }
+    .stat-label { font-size: 12px; color: #64748b;
+                  text-transform: uppercase;
+                  letter-spacing: 1px; }
+
+    .card { background: #1e293b; border: 1px solid #334155;
+            border-radius: 12px; padding: 24px;
+            margin-bottom: 24px; }
+    .card h2 { font-size: 15px; color: #e2e8f0;
+               margin-bottom: 20px; padding-bottom: 12px;
+               border-bottom: 1px solid #334155; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 10px 12px;
+         font-size: 11px; color: #64748b;
+         text-transform: uppercase; letter-spacing: 1px;
+         border-bottom: 1px solid #334155; }
+    td { padding: 12px; font-size: 13px;
+         border-bottom: 1px solid #1e293b; }
+    tr:hover td { background: #253352; }
+
+    .badge { display: inline-block; padding: 3px 10px;
+             border-radius: 12px; font-size: 11px;
+             font-weight: 600; }
+    .badge-admin   { background: #451a03; color: #f59e0b; }
+    .badge-analyst { background: #1e3a5f; color: #60a5fa; }
+    .badge-viewer  { background: #1a2a1a; color: #34d399; }
+    .badge-custom  { background: #2a1a3a; color: #a78bfa; }
+
+    .form-grid { display: grid; gap: 16px; }
+    .form-grid-2 { grid-template-columns: 1fr 1fr; }
+    .form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .form-grid-4 {
+      grid-template-columns: 1fr 1fr 1fr auto; }
+
+    .form-group { display: flex; flex-direction: column;
+                  gap: 6px; }
+    .form-group label { font-size: 12px; color: #64748b; }
+    .form-group input,
+    .form-group select {
+        padding: 10px 12px; background: #0f172a;
+        border: 1px solid #334155; color: white;
+        border-radius: 6px; font-size: 13px;
+        outline: none; width: 100%; }
+    .form-group input:focus,
+    .form-group select:focus { border-color: #3b82f6; }
+    .hint { font-size: 11px; color: #475569; }
+
+    .checkbox-row { display: flex; align-items: center;
+                    gap: 8px; margin-top: 4px; }
+    .checkbox-row input { width: auto; }
+    .checkbox-row label { font-size: 13px;
+                          color: #94a3b8; margin: 0; }
+
+    .btn { padding: 10px 18px; border: none;
+           border-radius: 6px; cursor: pointer;
+           font-size: 13px; font-weight: 600; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-success { background: #059669; color: white; }
+    .btn-success:hover { background: #047857; }
+    .btn-danger { background: #dc2626; color: white;
+                  padding: 6px 12px; font-size: 12px; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-warning { background: #d97706; color: white;
+                   padding: 6px 12px; font-size: 12px; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+    .btn-cancel { background: #334155; color: #94a3b8; }
+
+    .alert { padding: 12px 16px; border-radius: 8px;
+             font-size: 13px; margin-bottom: 16px; }
+    .alert-success { background: #1a3a2a; color: #34d399; }
+
+    .table-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .table-chip { background: #1e3a5f; color: #93c5fd;
+                  padding: 2px 8px; border-radius: 10px;
+                  font-size: 11px; }
+
+    .modal { display: none; position: fixed; inset: 0;
+             background: rgba(0,0,0,0.8); z-index: 100;
+             align-items: center; justify-content: center; }
+    .modal.active { display: flex; }
+    .modal-box { background: #1e293b;
+                 border: 1px solid #334155;
+                 border-radius: 12px; padding: 28px;
+                 width: 520px; max-height: 80vh;
+                 overflow-y: auto; }
+    .modal-box h3 { color: #e2e8f0; margin-bottom: 20px; }
+    .modal-footer { display: flex; gap: 12px;
+                    margin-top: 20px;
+                    justify-content: flex-end; }
+
+    .table-select { display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 8px; margin-top: 8px; }
+    .table-select label {
+        display: flex; align-items: center;
+        gap: 6px; font-size: 12px;
+        color: #94a3b8; cursor: pointer; }
+    .table-select input { width: auto; }
+
+    .empty { text-align: center; padding: 40px;
+             color: #475569; font-size: 14px; }
+
+    .security-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px; margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚙️ Admin Panel</h1>
+  <div class="nav">
+    <a href="/">💬 Chat</a>
+    <a href="/upload">📁 Upload</a>
+    <a href="/logout">Logout</a>
+  </div>
+</header>
+
+<div class="container">
+
+  {% for msg in get_flashed_messages() %}
+  <div class="alert alert-success">✅ {{ msg }}</div>
+  {% endfor %}
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-value">{{ stats.total_users }}</div>
+      <div class="stat-label">Total Users</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:#f59e0b">
+        {{ stats.admins }}
+      </div>
+      <div class="stat-label">Admins</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:#60a5fa">
+        {{ stats.analysts }}
+      </div>
+      <div class="stat-label">Analysts</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:#34d399">
+        {{ stats.viewers }}
+      </div>
+      <div class="stat-label">Viewers</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('users',event)">
+      👥 Users
+    </div>
+    <div class="tab" onclick="showTab('roles',event)">
+      🔑 Roles
+    </div>
+    <div class="tab" onclick="showTab('tables',event)">
+      🗄️ Tables
+    </div>
+    <div class="tab" onclick="showTab('activity',event)">
+      🛡️ Security & Audit
+    </div>
+  </div>
+
+  <!-- ── USERS TAB ──────────────────────────────────────── -->
+  <div id="tab-users" class="tab-content active">
+
+    <div class="card">
+      <h2>➕ Create New User</h2>
+      <form method="POST" action="/admin/create_user">
+        <div class="form-grid form-grid-4"
+             style="margin-bottom:16px;">
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" name="username"
+                   placeholder="username" required/>
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" name="password"
+                   placeholder="password" required/>
+          </div>
+          <div class="form-group">
+            <label>Role</label>
+            <select name="role" id="create-role"
+                    onchange="toggleCreateTables()">
+              <option value="viewer">Viewer</option>
+              <option value="analyst">Analyst</option>
+              <option value="admin">Admin</option>
+              {% for role in roles %}
+              {% if role.name not in
+                ['admin','analyst','viewer'] %}
+              <option value="{{ role.name }}">
+                {{ role.name }}
+              </option>
+              {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>&nbsp;</label>
+            <button type="submit" class="btn btn-primary">
+              Create
+            </button>
+          </div>
+        </div>
+        <div class="form-group" id="create-tables-group">
+          <label>
+            Allowed Tables
+            <span class="hint">
+              (viewer only — check tables they can access)
+            </span>
+          </label>
+          <div class="table-select">
+            {% for table in all_tables %}
+            <label>
+              <input type="checkbox"
+                     name="allowed_tables"
+                     value="{{ table.name }}"/>
+              {{ table.name }}
+              <span style="color:#475569;">
+                ({{ '{:,}'.format(table.rows) }})
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>👥 All Users</h2>
+      {% if users %}
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Table Access</th>
+            <th>Joined</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td><strong>{{ user.username }}</strong></td>
+            <td>
+              <span class="badge
+                {% if user.role == 'admin' %}badge-admin
+                {% elif user.role == 'analyst' %}badge-analyst
+                {% else %}badge-viewer{% endif %}">
+                {{ user.role }}
+              </span>
+            </td>
+            <td>
+              {% if user.role in ['admin','analyst'] %}
+                <span style="color:#64748b;font-size:12px;">
+                  All tables
+                </span>
+              {% elif user.allowed_tables %}
+                <div class="table-chips">
+                  {% for t in
+                    user.allowed_tables.split(',') %}
+                  <span class="table-chip">
+                    {{ t.strip() }}
+                  </span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <span style="color:#ef4444;font-size:12px;">
+                  No access
+                </span>
+              {% endif %}
+            </td>
+            <td style="color:#64748b;font-size:12px;">
+              {{ user.created_at.strftime('%d %b %Y')
+                 if user.created_at else '-' }}
+            </td>
+            <td style="display:flex;gap:8px;
+                       flex-wrap:wrap;">
+              <button class="btn btn-warning btn-sm"
+                onclick="openEdit(
+                  {{ user.id }},
+                  '{{ user.username }}',
+                  '{{ user.role }}',
+                  '{{ user.allowed_tables or '' }}'
+                )">✏️ Edit
+              </button>
+              {% if user.role == 'viewer' %}
+              <button class="btn btn-sm"
+                style="background:#1e3a5f;color:#60a5fa;"
+                onclick="revokeAccess(
+                  {{ user.id }},
+                  '{{ user.username }}')">
+                🔒 Revoke
+              </button>
+              {% endif %}
+              {% if user.username !=
+                current_user.username %}
+              <button class="btn btn-danger btn-sm"
+                onclick="deleteUser(
+                  {{ user.id }},
+                  '{{ user.username }}')">
+                🗑️ Delete
+              </button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">No users found</div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- ── ROLES TAB ──────────────────────────────────────── -->
+  <div id="tab-roles" class="tab-content">
+
+    <div class="card">
+      <h2>➕ Create Custom Role</h2>
+      <form method="POST" action="/admin/create_role">
+        <div class="form-grid form-grid-2"
+             style="margin-bottom:16px;">
+          <div class="form-group">
+            <label>Role Name</label>
+            <input type="text" name="name"
+                   placeholder="e.g. finance_team"
+                   required/>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input type="text" name="description"
+                   placeholder="What can this role do?"/>
+          </div>
+        </div>
+        <div style="display:flex;gap:24px;
+                    margin-bottom:16px;">
+          <div class="checkbox-row">
+            <input type="checkbox" name="can_query"
+                   id="can_query" checked/>
+            <label for="can_query">Can Query Data</label>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" name="can_upload"
+                   id="can_upload"/>
+            <label for="can_upload">
+              Can Upload Files
+            </label>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-success">
+          Create Role
+        </button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>🔑 All Roles</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Role</th>
+            <th>Description</th>
+            <th>Can Query</th>
+            <th>Can Upload</th>
+            <th>Is Admin</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for role in roles %}
+          <tr>
+            <td>
+              <span class="badge
+                {% if role.name == 'admin' %}badge-admin
+                {% elif role.name == 'analyst' %}
+                  badge-analyst
+                {% elif role.name == 'viewer' %}
+                  badge-viewer
+                {% else %}badge-custom{% endif %}">
+                {{ role.name }}
+              </span>
+            </td>
+            <td style="color:#94a3b8;font-size:13px;">
+              {{ role.description or '-' }}
+            </td>
+            <td>
+              {% if role.can_query %}
+              <span style="color:#34d399">✅</span>
+              {% else %}
+              <span style="color:#ef4444">❌</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if role.can_upload %}
+              <span style="color:#34d399">✅</span>
+              {% else %}
+              <span style="color:#ef4444">❌</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if role.is_admin %}
+              <span style="color:#f59e0b">✅</span>
+              {% else %}
+              <span style="color:#64748b">❌</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if role.name not in
+                ['admin','analyst','viewer'] %}
+              <button class="btn btn-danger btn-sm"
+                onclick="deleteRole('{{ role.name }}')">
+                Delete
+              </button>
+              {% else %}
+              <span style="color:#475569;font-size:12px;">
+                Built-in
+              </span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ── TABLES TAB ─────────────────────────────────────── -->
+  <div id="tab-tables" class="tab-content">
+    <div class="card">
+      <h2>🗄️ Database Tables</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Table Name</th>
+            <th>Rows</th>
+            <th>Accessible By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for table in all_tables %}
+          <tr>
+            <td><strong>{{ table.name }}</strong></td>
+            <td style="color:#64748b;">
+              {{ '{:,}'.format(table.rows) }}
+            </td>
+            <td style="color:#64748b;font-size:12px;">
+              Admin, Analyst + viewers with access
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── SECURITY & AUDIT TAB ──────────────────────────── -->
+  <div id="tab-activity" class="tab-content">
+
+    <!-- Security Report -->
+    <div class="card">
+      <h2>🛡️ Security Report (Last 24 Hours)</h2>
+      <div class="security-grid" id="security-stats">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-total">-</div>
+          <div class="stat-label">Total Queries</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value"
+               style="color:#34d399"
+               id="stat-success">-</div>
+          <div class="stat-label">Successful</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value"
+               style="color:#ef4444"
+               id="stat-blocked">-</div>
+          <div class="stat-label">Blocked</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value"
+               style="color:#f59e0b"
+               id="stat-users">-</div>
+          <div class="stat-label">Unique Users</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value"
+               style="color:#a78bfa"
+               id="stat-avgms">-</div>
+          <div class="stat-label">Avg Response</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audit Log -->
+    <div class="card">
+      <h2>📋 Zero-Knowledge Audit Log</h2>
+      <p style="color:#64748b;font-size:12px;
+                margin-bottom:16px;">
+        ℹ️ Metadata only — no actual data values stored.
+        GDPR compliant.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>User</th>
+            <th>Role</th>
+            <th>Query Type</th>
+            <th>Tables Used</th>
+            <th>Rows</th>
+            <th>Status</th>
+            <th>Response</th>
+          </tr>
+        </thead>
+        <tbody id="audit-body">
+          <tr>
+            <td colspan="8"
+                style="text-align:center;
+                       color:#64748b;padding:32px;">
+              Click "Security & Audit" tab to load...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Conversation Log -->
+    <div class="card">
+      <h2>💬 Recent Conversations</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th>Message</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for conv in conversations %}
+          {% if conv.role == 'user' %}
+          <tr>
+            <td>
+              <strong>{{ conv.username }}</strong>
+            </td>
+            <td>
+              <span class="badge
+                {% if conv.user_role == 'admin' %}
+                  badge-admin
+                {% elif conv.user_role == 'analyst' %}
+                  badge-analyst
+                {% else %}badge-viewer{% endif %}">
+                {{ conv.user_role }}
+              </span>
+            </td>
+            <td style="max-width:400px;color:#94a3b8;">
+              {{ conv.message[:80] }}
+              {% if conv.message|length > 80 %}
+              ...{% endif %}
+            </td>
+            <td style="color:#64748b;font-size:12px;
+                       white-space:nowrap;">
+              {{ conv.created_at.strftime('%d %b %H:%M')
+                 if conv.created_at else '-' }}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal" id="edit-modal">
+  <div class="modal-box">
+    <h3>✏️ Edit User Access</h3>
+    <form method="POST" action="/admin/update_user">
+      <input type="hidden" name="user_id" id="edit-id"/>
+
+      <div class="form-group" style="margin-bottom:16px;">
+        <label>Username</label>
+        <input type="text" id="edit-username"
+               disabled style="opacity:0.5;"/>
+      </div>
+
+      <div class="form-group" style="margin-bottom:16px;">
+        <label>Role</label>
+        <select name="role" id="edit-role"
+                onchange="toggleEditTables()">
+          <option value="viewer">Viewer</option>
+          <option value="analyst">Analyst</option>
+          <option value="admin">Admin</option>
+          {% for role in roles %}
+          {% if role.name not in
+            ['admin','analyst','viewer'] %}
+          <option value="{{ role.name }}">
+            {{ role.name }}
+          </option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group" id="edit-tables-group"
+           style="margin-bottom:16px;">
+        <label>
+          Allowed Tables
+          <span class="hint">
+            (viewer role only)
+          </span>
+        </label>
+        <div class="table-select"
+             id="edit-table-checkboxes">
+          {% for table in all_tables %}
+          <label>
+            <input type="checkbox"
+                   name="allowed_tables"
+                   class="edit-table-cb"
+                   value="{{ table.name }}"/>
+            {{ table.name }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button"
+                class="btn btn-cancel"
+                onclick="closeEdit()">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary">
+          Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function showTab(name, event) {
+    document.querySelectorAll('.tab-content')
+      .forEach(t => t.classList.remove('active'))
+    document.querySelectorAll('.tab')
+      .forEach(t => t.classList.remove('active'))
+    document.getElementById('tab-' + name)
+      .classList.add('active')
+    if (event && event.target)
+      event.target.classList.add('active')
+    if (name === 'activity') loadAudit()
+  }
+
+  function toggleCreateTables() {
+    const role = document.getElementById(
+      'create-role').value
+    const grp  = document.getElementById(
+      'create-tables-group')
+    grp.style.display =
+      role === 'viewer' ? 'flex' : 'none'
+  }
+  toggleCreateTables()
+
+  function openEdit(id, username, role, tables) {
+    document.getElementById('edit-id').value       = id
+    document.getElementById('edit-username').value = username
+    document.getElementById('edit-role').value     = role
+
+    const cbs     = document.querySelectorAll(
+      '.edit-table-cb')
+    const allowed = tables
+      ? tables.split(',').map(t => t.trim()) : []
+    cbs.forEach(cb => {
+      cb.checked = allowed.includes(cb.value)
+    })
+
+    toggleEditTables()
+    document.getElementById('edit-modal')
+      .classList.add('active')
+  }
+
+  function closeEdit() {
+    document.getElementById('edit-modal')
+      .classList.remove('active')
+  }
+
+  function toggleEditTables() {
+    const role = document.getElementById('edit-role').value
+    const grp  = document.getElementById(
+      'edit-tables-group')
+    grp.style.display =
+      role === 'viewer' ? 'flex' : 'none'
+  }
+
+  function revokeAccess(id, username) {
+    if (confirm(
+      `Revoke all table access from "${username}"?`
+    )) {
+      fetch('/admin/revoke_access', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({user_id: id})
+      }).then(() => location.reload())
+    }
+  }
+
+  function deleteUser(id, username) {
+    if (confirm(
+      `Delete user "${username}"? Cannot be undone.`
+    )) {
+      fetch('/admin/delete_user', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({user_id: id})
+      }).then(() => location.reload())
+    }
+  }
+
+  function deleteRole(name) {
+    if (confirm(`Delete role "${name}"?`)) {
+      fetch('/admin/delete_role', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({role_name: name})
+      }).then(() => location.reload())
+    }
+  }
+
+  function loadAudit() {
+    fetch('/admin/audit')
+      .then(r => r.json())
+      .then(data => {
+
+        const r = data.report || {}
+        document.getElementById('stat-total')
+          .textContent = r.total_queries || 0
+        document.getElementById('stat-success')
+          .textContent = r.successful || 0
+        document.getElementById('stat-blocked')
+          .textContent = r.blocked || 0
+        document.getElementById('stat-users')
+          .textContent = r.unique_users || 0
+        document.getElementById('stat-avgms')
+          .textContent =
+            Math.round(r.avg_response_ms || 0) + 'ms'
+
+        const tbody = document.getElementById('audit-body')
+
+        if (!data.logs || data.logs.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="8" ' +
+            'style="text-align:center;color:#64748b;' +
+            'padding:32px;">No audit logs yet</td></tr>'
+          return
+        }
+
+        tbody.innerHTML = data.logs.map(log => `
+          <tr>
+            <td style="color:#64748b;font-size:11px;
+                       white-space:nowrap;">
+              ${log.created_at}
+            </td>
+            <td><strong>${log.username}</strong></td>
+            <td>
+              <span class="badge badge-${log.user_role}">
+                ${log.user_role}
+              </span>
+            </td>
+            <td style="color:#94a3b8;font-size:12px;">
+              ${log.query_type || '-'}
+            </td>
+            <td style="color:#60a5fa;font-size:12px;">
+              ${log.tables_used || '-'}
+            </td>
+            <td style="color:#64748b;">
+              ${log.row_count || 0}
+            </td>
+            <td>
+              <span style="font-size:11px;padding:2px 8px;
+                border-radius:10px;
+                background:${log.status === 'success'
+                  ? '#1a3a2a' : '#3a1a1a'};
+                color:${log.status === 'success'
+                  ? '#34d399' : '#f87171'};">
+                ${log.status}
+                ${log.blocked_reason
+                  ? '(' + log.blocked_reason + ')' : ''}
+              </span>
+            </td>
+            <td style="color:#64748b;font-size:12px;">
+              ${log.response_ms || 0}ms
+            </td>
+          </tr>
+        `).join('')
+      })
+      .catch(e => {
+        console.error('Audit load error:', e)
+        document.getElementById('audit-body').innerHTML =
+          '<tr><td colspan="8" ' +
+          'style="text-align:center;color:#ef4444">' +
+          'Error loading audit logs</td></tr>'
+      })
+  }
+</script>
+</body>
+</html>

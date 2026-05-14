@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Data Analyst Bot</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #0f172a;
+           color: #e2e8f0; height: 100vh;
+           display: flex; flex-direction: column; }
+
+    header { background: #1e293b; padding: 16px 24px;
+             display: flex; justify-content: space-between;
+             align-items: center; border-bottom: 1px solid #334155; }
+    header h1 { color: #60a5fa; font-size: 18px; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    header span { color: #94a3b8; font-size: 13px; }
+    .btn-link { color: #f87171; font-size: 13px;
+                text-decoration: none; cursor: pointer;
+                background: none; border: none; }
+    .btn-clear { color: #fbbf24; font-size: 13px;
+                 background: none; border: none; cursor: pointer; }
+    .btn-upload { color: #34d399; font-size: 13px;
+                  text-decoration: none; }
+
+    .memory-bar { background: #1e293b; padding: 6px 24px;
+                  font-size: 11px; color: #475569;
+                  border-bottom: 1px solid #334155;
+                  display: flex; align-items: center;
+                  justify-content: space-between; }
+    .memory-left { display: flex; align-items: center; gap: 8px; }
+    .memory-dot { width: 6px; height: 6px; border-radius: 50%;
+                  background: #22c55e; display: inline-block; }
+    .tables-info { color: #475569; font-size: 11px; }
+    .tables-info span { color: #60a5fa; }
+
+    #chat-box { flex: 1; overflow-y: auto; padding: 24px;
+                display: flex; flex-direction: column; gap: 16px; }
+
+    .msg { max-width: 78%; padding: 14px 18px;
+           border-radius: 12px; font-size: 14px; line-height: 1.7; }
+    .user-msg { background: #1d4ed8; align-self: flex-end;
+                border-bottom-right-radius: 4px; }
+    .bot-msg  { background: #1e293b; align-self: flex-start;
+                border-bottom-left-radius: 4px;
+                border: 1px solid #334155; }
+
+    .sql-tag { margin-top: 10px; background: #0f172a;
+               border-radius: 6px; padding: 8px 12px;
+               font-family: monospace; font-size: 12px;
+               color: #7dd3fc; border-left: 3px solid #3b82f6; }
+    .sql-label { font-size: 10px; color: #64748b;
+                 text-transform: uppercase; letter-spacing: 1px;
+                 margin-bottom: 4px; }
+
+    .intent-tag { display: inline-block; font-size: 10px;
+                  padding: 2px 8px; border-radius: 10px;
+                  margin-bottom: 8px; font-weight: 600; }
+    .intent-DATA_QUESTION  { background: #1e3a5f; color: #60a5fa; }
+    .intent-CASUAL_CHAT    { background: #1a3a2a; color: #34d399; }
+    .intent-HELP_REQUEST   { background: #3a2a1a; color: #fbbf24; }
+    .intent-SCHEMA_REQUEST { background: #2a1a3a; color: #a78bfa; }
+
+    .chart-container { margin-top: 16px; background: #0f172a;
+                       border-radius: 8px; padding: 16px;
+                       border: 1px solid #1e293b;
+                       position: relative; height: 300px; }
+    .chart-label { font-size: 10px; color: #64748b;
+                   text-transform: uppercase; letter-spacing: 1px;
+                   margin-bottom: 8px; }
+
+    .followups { margin-top: 12px; display: flex;
+                 flex-wrap: wrap; gap: 8px; }
+    .followup-label { font-size: 11px; color: #64748b;
+                      width: 100%; margin-bottom: 2px; }
+    .followup-chip { background: #0f2744; color: #93c5fd;
+                     border: 1px solid #1e3a5f; padding: 5px 12px;
+                     border-radius: 16px; font-size: 12px;
+                     cursor: pointer; transition: all 0.2s; }
+    .followup-chip:hover { background: #1d4ed8; color: white; }
+
+    .suggestions { display: flex; flex-wrap: wrap;
+                   gap: 8px; margin-top: 12px; }
+    .chip { background: #1e3a5f; color: #60a5fa;
+            border: 1px solid #1d4ed8; padding: 6px 12px;
+            border-radius: 20px; font-size: 12px;
+            cursor: pointer; transition: background 0.2s; }
+    .chip:hover { background: #1d4ed8; }
+
+    .loading { color: #64748b; font-style: italic; font-size: 13px; }
+
+    footer { background: #1e293b; padding: 16px 24px;
+             border-top: 1px solid #334155;
+             display: flex; gap: 12px; }
+    #input { flex: 1; padding: 12px 16px; background: #0f172a;
+             border: 1px solid #334155; color: white;
+             border-radius: 8px; font-size: 14px; outline: none; }
+    #input:focus { border-color: #3b82f6; }
+    #send-btn { padding: 12px 24px; background: #3b82f6;
+                color: white; border: none; border-radius: 8px;
+                cursor: pointer; font-size: 14px; font-weight: 600; }
+    #send-btn:hover { background: #2563eb; }
+    #send-btn:disabled { background: #334155; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>📊 Data Analyst Bot</h1>
+    <div class="header-right">
+      <span>Logged in as <strong>{{ username }}</strong></span>
+      {% if current_user.role == 'admin' %}
+      <a href="/admin"
+      style="color:#f59e0b; font-size:13px;
+          text-decoration:none; margin-left:8px;">
+  ⚙️ Admin
+</a>
+{% endif %}
+      <a class="btn-upload" href="/upload">📁 Upload Data</a>
+      <button class="btn-clear" onclick="clearHistory()">
+        🗑️ Clear Chat
+      </button>
+      <a class="btn-link" href="/logout">Logout</a>
+    </div>
+  </header>
+
+  <div class="memory-bar">
+    <div class="memory-left">
+      <span class="memory-dot"></span>
+      <span id="memory-text">
+        Memory active — I remember your conversation
+      </span>
+    </div>
+    <div class="tables-info" id="tables-info">
+      Loading tables...
+    </div>
+  </div>
+
+  <div id="chat-box">
+    <div class="msg bot-msg">
+      Hello <strong>{{ username }}</strong>! 👋
+      Ask me anything — I'll show charts automatically!
+      <div class="suggestions">
+        <span class="chip"
+          onclick="askQuestion('What are the top 5 products by revenue?')">
+          🏆 Top Products
+        </span>
+        <span class="chip"
+          onclick="askQuestion('Show revenue breakdown by channel')">
+          🥧 Revenue by Channel
+        </span>
+        <span class="chip"
+          onclick="askQuestion('What is the monthly revenue trend?')">
+          📈 Monthly Trend
+        </span>
+        <span class="chip"
+          onclick="askQuestion('Which warehouse has the most orders?')">
+          🏭 Top Warehouse
+        </span>
+        <span class="chip"
+          onclick="askQuestion('Who are the top 5 customers by revenue?')">
+          👥 Top Customers
+        </span>
+        <span class="chip"
+          onclick="askQuestion('What is the total revenue?')">
+          💰 Total Revenue
+        </span>
+        <span class="chip"
+          onclick="askQuestion('What data do you have?')">
+          🗄️ What data?
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <input id="input" type="text"
+           placeholder="Ask anything — charts appear automatically!" />
+    <button id="send-btn" onclick="sendMessage()">Ask</button>
+  </footer>
+
+  <script>
+    const chatBox = document.getElementById('chat-box')
+    const input   = document.getElementById('input')
+    const sendBtn = document.getElementById('send-btn')
+    const memText = document.getElementById('memory-text')
+
+    let messageCount = 0
+
+    window.onload = loadTableInfo
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendMessage()
+    })
+
+    function askQuestion(question) {
+      input.value = question
+      sendMessage()
+    }
+
+    async function loadTableInfo() {
+      try {
+        const res  = await fetch('/tables')
+        const data = await res.json()
+        const el   = document.getElementById('tables-info')
+        if (data.tables && data.tables.length > 0) {
+          const names = data.tables
+            .map(t => `<span>${t.name}</span>`)
+            .join(', ')
+          el.innerHTML = `📋 Tables: ${names}`
+        } else {
+          el.innerHTML = '📋 No tables loaded'
+        }
+      } catch (e) {
+        document.getElementById('tables-info').textContent = ''
+      }
+    }
+
+    async function clearHistory() {
+      await fetch('/clear_history', { method: 'POST' })
+      chatBox.innerHTML = ''
+      messageCount = 0
+      updateMemoryBar(0)
+      addMessage('Chat cleared! Starting fresh 🗑️', 'bot-msg')
+    }
+
+    function updateMemoryBar(count) {
+      if (count === 0) {
+        memText.textContent =
+          'Memory active — I remember your conversation'
+      } else {
+        memText.textContent =
+          `Memory active — Remembering ${count} message${count > 1 ? 's' : ''}`
+      }
+    }
+
+    function addMessage(text, type, sql = null, rowCount = null,
+                        intent = null, followups = [], chart = null) {
+
+      const div = document.createElement('div')
+      div.className = `msg ${type}`
+
+      // Intent badge
+      let intentBadge = ''
+      if (intent && intent !== 'null') {
+        const labels = {
+          'DATA_QUESTION':  '📊 Data Query',
+          'CASUAL_CHAT':    '💬 Chat',
+          'HELP_REQUEST':   '❓ Help',
+          'SCHEMA_REQUEST': '🗄️ Schema Info',
+          'OUT_OF_SCOPE':   '⚠️ Out of Scope'
+        }
+        intentBadge = `
+          <div class="intent-tag intent-${intent}">
+            ${labels[intent] || intent}
+          </div>`
+      }
+
+      div.innerHTML = intentBadge + text
+
+      // SQL box
+      if (sql) {
+        div.innerHTML += `
+          <div class="sql-tag">
+            <div class="sql-label">Generated SQL</div>
+            ${sql}
+          </div>`
+      }
+
+      // Row count
+      if (rowCount !== null && rowCount > 0) {
+        div.innerHTML += `
+          <div style="margin-top:8px;font-size:11px;color:#64748b;">
+            ${rowCount} row(s) returned
+          </div>`
+      }
+
+      // Chart
+      if (chart) {
+        const chartId = 'chart_' + Date.now()
+        div.innerHTML += `
+          <div class="chart-container">
+            <div class="chart-label">📈 Visualization</div>
+            <canvas id="${chartId}"></canvas>
+          </div>`
+
+        setTimeout(() => {
+          const canvas = document.getElementById(chartId)
+          if (canvas) new Chart(canvas, chart)
+        }, 100)
+      }
+
+      // Follow-ups
+      if (followups && followups.length > 0) {
+        let html =
+          '<div class="followups">' +
+          '<div class="followup-label">💡 You might also ask:</div>'
+        followups.forEach(q => {
+          html += `
+            <span class="followup-chip"
+              onclick="askQuestion('${q.replace(/'/g, "\\'")}')">
+              ${q}
+            </span>`
+        })
+        html += '</div>'
+        div.innerHTML += html
+      }
+
+      chatBox.appendChild(div)
+      chatBox.scrollTop = chatBox.scrollHeight
+      return div
+    }
+
+    async function sendMessage() {
+      const question = input.value.trim()
+      if (!question) return
+
+      addMessage(question, 'user-msg')
+      input.value = ''
+      sendBtn.disabled = true
+      messageCount++
+      updateMemoryBar(messageCount)
+
+      const loadingEl = addMessage('Thinking...', 'bot-msg loading')
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question })
+        })
+        const data = await res.json()
+        loadingEl.remove()
+
+        if (data.error) {
+          addMessage('⚠️ ' + data.error, 'bot-msg')
+        } else {
+          addMessage(
+            data.answer,
+            'bot-msg',
+            data.sql,
+            data.row_count,
+            data.intent,
+            data.followups || [],
+            data.chart || null
+          )
+        }
+
+      } catch (err) {
+        loadingEl.remove()
+        addMessage('⚠️ Something went wrong.', 'bot-msg')
+      } finally {
+        sendBtn.disabled = false
+        input.focus()
+      }
+    }
+  </script>
+</body>
+</html>
