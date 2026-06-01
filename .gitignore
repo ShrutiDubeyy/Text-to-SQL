@@ -1,0 +1,29 @@
+# Environment variables (NEVER push this)
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+*.egg-info/
+
+# Data files (can be large)
+data/
+*.csv
+*.xlsx
+*.xls
+
+# Database
+*.db
+*.sqlite
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

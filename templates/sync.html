@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Live Data Sync</title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:sans-serif;
+           background:#0f172a; color:#e2e8f0;
+           min-height:100vh; }
+
+    header { background:#1e293b; padding:16px 24px;
+             display:flex; justify-content:space-between;
+             align-items:center;
+             border-bottom:1px solid #334155; }
+    header h1 { color:#34d399; font-size:18px; }
+    .nav a { color:#94a3b8; text-decoration:none;
+             font-size:14px; margin-left:20px; }
+
+    .container { max-width:1100px; margin:0 auto;
+                 padding:32px 24px; }
+
+    /* Status bar */
+    .status-bar { background:#1e293b;
+                  border:1px solid #334155;
+                  border-radius:12px; padding:20px;
+                  margin-bottom:24px;
+                  display:flex; gap:32px;
+                  align-items:center; }
+    .status-item { text-align:center; }
+    .status-value { font-size:24px; font-weight:700; }
+    .status-label { font-size:11px; color:#64748b;
+                    text-transform:uppercase;
+                    letter-spacing:1px; }
+    .pulse { display:inline-block; width:8px;
+             height:8px; border-radius:50%;
+             background:#22c55e;
+             animation:pulse 2s infinite; }
+    @keyframes pulse {
+      0%,100% { opacity:1; }
+      50%      { opacity:0.3; }
+    }
+
+    .card { background:#1e293b;
+            border:1px solid #334155;
+            border-radius:12px; padding:24px;
+            margin-bottom:24px; }
+    .card-header { display:flex;
+                   justify-content:space-between;
+                   align-items:center;
+                   margin-bottom:20px;
+                   padding-bottom:12px;
+                   border-bottom:1px solid #334155; }
+    .card-header h2 { font-size:15px;
+                      color:#e2e8f0; }
+
+    /* Source cards */
+    .source-grid { display:grid;
+                   grid-template-columns:
+                     repeat(auto-fill,
+                     minmax(300px,1fr));
+                   gap:16px; }
+    .source-card { background:#0f172a;
+                   border:1px solid #334155;
+                   border-radius:10px;
+                   padding:16px; }
+    .source-header { display:flex;
+                     justify-content:space-between;
+                     align-items:center;
+                     margin-bottom:12px; }
+    .source-name { font-size:14px;
+                   font-weight:600;
+                   color:#e2e8f0; }
+    .source-type { font-size:11px; padding:2px 8px;
+                   border-radius:10px; }
+    .type-google_sheet { background:#1e3a5f;
+                         color:#60a5fa; }
+    .type-webhook      { background:#2a1a3a;
+                         color:#a78bfa; }
+    .type-csv          { background:#1a2a1a;
+                         color:#34d399; }
+
+    .source-stats { display:grid;
+                    grid-template-columns:1fr 1fr;
+                    gap:8px; margin-bottom:12px; }
+    .stat { background:#1e293b; border-radius:6px;
+            padding:8px 12px; }
+    .stat-val { font-size:16px; font-weight:600;
+                color:#60a5fa; }
+    .stat-lbl { font-size:10px; color:#64748b;
+                text-transform:uppercase; }
+
+    .status-badge { display:inline-block;
+                    padding:3px 10px;
+                    border-radius:10px;
+                    font-size:11px;
+                    font-weight:600; }
+    .status-success { background:#1a3a2a;
+                      color:#34d399; }
+    .status-failed  { background:#3a1a1a;
+                      color:#f87171; }
+    .status-pending { background:#2a2a1a;
+                      color:#fbbf24; }
+    .status-syncing { background:#1a2a3a;
+                      color:#60a5fa; }
+
+    .sync-btn { width:100%; padding:8px;
+                background:#1d4ed8; color:white;
+                border:none; border-radius:6px;
+                cursor:pointer; font-size:12px;
+                margin-top:8px; }
+    .sync-btn:hover { background:#2563eb; }
+    .sync-btn:disabled { background:#334155;
+                         cursor:not-allowed; }
+
+    /* Add source form */
+    .form-grid { display:grid; gap:12px; }
+    .form-grid-2 { grid-template-columns:1fr 1fr; }
+    .form-group { display:flex;
+                  flex-direction:column; gap:6px; }
+    .form-group label { font-size:12px;
+                        color:#64748b; }
+    .form-group input,
+    .form-group select {
+        padding:10px 12px; background:#0f172a;
+        border:1px solid #334155; color:white;
+        border-radius:6px; font-size:13px;
+        outline:none; width:100%; }
+    .form-group input:focus { border-color:#3b82f6; }
+
+    .btn { padding:10px 18px; border:none;
+           border-radius:6px; cursor:pointer;
+           font-size:13px; font-weight:600; }
+    .btn-primary { background:#3b82f6; color:white; }
+    .btn-primary:hover { background:#2563eb; }
+
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; padding:10px 12px;
+         font-size:11px; color:#64748b;
+         text-transform:uppercase;
+         letter-spacing:1px;
+         border-bottom:1px solid #334155; }
+    td { padding:10px 12px; font-size:12px;
+         border-bottom:1px solid #1e293b;
+         color:#94a3b8; }
+    tr:hover td { background:#253352; }
+
+    .token-box { background:#0f172a;
+                 border:1px solid #334155;
+                 border-radius:6px;
+                 padding:8px 12px;
+                 font-family:monospace;
+                 font-size:12px; color:#34d399;
+                 word-break:break-all; }
+    .copy-btn { background:#1e3a5f; color:#60a5fa;
+                border:none; padding:4px 10px;
+                border-radius:4px; cursor:pointer;
+                font-size:11px; margin-left:8px; }
+
+    .tabs { display:flex; gap:4px;
+            margin-bottom:24px;
+            border-bottom:1px solid #334155; }
+    .tab { padding:10px 20px; cursor:pointer;
+           font-size:14px; color:#64748b;
+           border-bottom:2px solid transparent;
+           margin-bottom:-1px; }
+    .tab.active { color:#34d399;
+                  border-bottom-color:#34d399; }
+    .tab-content { display:none; }
+    .tab-content.active { display:block; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🔄 Live Data Sync</h1>
+  <div class="nav">
+    <a href="/">💬 Chat</a>
+    <a href="/admin">⚙️ Admin</a>
+    <a href="/logout">Logout</a>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div style="display:flex;align-items:center;
+                gap:8px;">
+      <span class="pulse"></span>
+      <span style="color:#34d399;font-size:14px;
+                   font-weight:600;">
+        Live Sync Active
+      </span>
+    </div>
+    <div class="status-item">
+      <div class="status-value"
+           id="total-sources">-</div>
+      <div class="status-label">Data Sources</div>
+    </div>
+    <div class="status-item">
+      <div class="status-value"
+           style="color:#34d399"
+           id="active-sources">-</div>
+      <div class="status-label">Active</div>
+    </div>
+    <div class="status-item">
+      <div class="status-value"
+           style="color:#f87171"
+           id="failed-sources">-</div>
+      <div class="status-label">Failed</div>
+    </div>
+    <div class="status-item">
+      <div class="status-value"
+           style="color:#60a5fa"
+           id="total-rows">-</div>
+      <div class="status-label">Total Rows</div>
+    </div>
+    <button class="btn btn-primary"
+            onclick="refreshAll()"
+            style="margin-left:auto;">
+      🔄 Sync All Now
+    </button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active"
+         onclick="showTab('sources',event)">
+      📊 Data Sources
+    </div>
+    <div class="tab"
+         onclick="showTab('add',event)">
+      ➕ Add Source
+    </div>
+    <div class="tab"
+         onclick="showTab('webhook',event)">
+      🔗 Webhook
+    </div>
+    <div class="tab"
+         onclick="showTab('logs',event)">
+      📋 Sync Logs
+    </div>
+  </div>
+
+  <!-- Sources Tab -->
+  <div id="tab-sources" class="tab-content active">
+    <div id="sources-grid" class="source-grid">
+      <div style="color:#64748b;font-size:13px;
+                  padding:20px;">
+        Loading sources...
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Source Tab -->
+  <div id="tab-add" class="tab-content">
+
+    <!-- Google Sheet -->
+    <div class="card">
+      <div class="card-header">
+        <h2>📊 Connect Google Sheet</h2>
+      </div>
+      <form id="add-sheet-form">
+        <div class="form-grid form-grid-2"
+             style="margin-bottom:16px;">
+          <div class="form-group">
+            <label>Source Name</label>
+            <input type="text" id="sheet-name"
+                   placeholder="e.g. Live Sales Data"
+                   required/>
+          </div>
+          <div class="form-group">
+            <label>MySQL Table Name</label>
+            <input type="text" id="sheet-table"
+                   placeholder="e.g. live_sales"
+                   required/>
+          </div>
+        </div>
+        <div class="form-group"
+             style="margin-bottom:16px;">
+          <label>Google Sheet URL</label>
+          <input type="text" id="sheet-url"
+                 placeholder="https://docs.google.com/spreadsheets/d/..."
+                 required/>
+        </div>
+        <div class="form-grid form-grid-2"
+             style="margin-bottom:16px;">
+          <div class="form-group">
+            <label>Sync Every (seconds)</label>
+            <input type="number" id="sheet-interval"
+                   value="300" min="60"/>
+          </div>
+        </div>
+        <button type="button"
+                class="btn btn-primary"
+                onclick="addGoogleSheet()">
+          Connect Sheet
+        </button>
+        <div id="sheet-msg"
+             style="margin-top:12px;font-size:13px;">
+        </div>
+      </form>
+
+      <div style="margin-top:20px;padding:16px;
+                  background:#0f172a;
+                  border-radius:8px;
+                  border:1px solid #334155;">
+        <div style="font-size:12px;color:#64748b;
+                    margin-bottom:8px;">
+          📋 Setup Instructions:
+        </div>
+        <ol style="font-size:12px;color:#94a3b8;
+                   padding-left:20px;
+                   line-height:2;">
+          <li>Go to console.cloud.google.com</li>
+          <li>Create a new project</li>
+          <li>Enable Google Sheets API</li>
+          <li>Create Service Account →
+              Download JSON credentials</li>
+          <li>Save as
+              credentials/google_sheets.json</li>
+          <li>Share your Google Sheet with the
+              service account email</li>
+          <li>Paste the sheet URL above</li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Webhook Tab -->
+  <div id="tab-webhook" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <h2>🔗 Webhook Endpoint</h2>
+      </div>
+
+      <p style="color:#94a3b8;font-size:13px;
+                margin-bottom:20px;">
+        External systems can push data directly
+        to your chatbot using webhooks.
+        Configure your CRM, ERP, or any system
+        to send data to the endpoint below.
+      </p>
+
+      <div style="margin-bottom:20px;">
+        <div style="font-size:12px;color:#64748b;
+                    margin-bottom:8px;">
+          Webhook Endpoint URL:
+        </div>
+        <div class="token-box" id="webhook-url">
+          http://localhost:5000/webhook/receive
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <div style="font-size:12px;color:#64748b;
+                    margin-bottom:8px;">
+          Request Format (POST, JSON body):
+        </div>
+        <div class="token-box"
+             style="white-space:pre-wrap;">
+{
+  "source_name": "my_crm",
+  "table_name":  "crm_leads",
+  "token":       "your_token_here",
+  "data": [
+    {"name": "John", "amount": 5000},
+    {"name": "Jane", "amount": 8000}
+  ]
+}</div>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <div style="font-size:12px;color:#64748b;
+                    margin-bottom:8px;">
+          Generate Token for Source:
+        </div>
+        <div style="display:flex;gap:12px;">
+          <input type="text"
+                 id="token-source-name"
+                 placeholder="Source name"
+                 style="flex:1;padding:8px 12px;
+                        background:#0f172a;
+                        border:1px solid #334155;
+                        color:white;border-radius:6px;
+                        font-size:13px;outline:none;"/>
+          <button class="btn btn-primary"
+                  onclick="generateToken()">
+            Generate Token
+          </button>
+        </div>
+        <div id="token-result"
+             style="margin-top:12px;display:none;">
+          <div style="font-size:12px;color:#64748b;
+                      margin-bottom:6px;">
+            Your webhook token:
+          </div>
+          <div style="display:flex;
+                      align-items:center;">
+            <div class="token-box" id="token-value"
+                 style="flex:1;"></div>
+            <button class="copy-btn"
+                    onclick="copyToken()">
+              Copy
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-header"
+           style="margin-top:24px;">
+        <h2>📋 Recent Webhook Events</h2>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Source</th>
+            <th>Table</th>
+            <th>Rows</th>
+            <th>Status</th>
+            <th>IP</th>
+          </tr>
+        </thead>
+        <tbody id="webhook-logs">
+          <tr>
+            <td colspan="6"
+                style="text-align:center;
+                       padding:20px;">
+              Loading...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Logs Tab -->
+  <div id="tab-logs" class="tab-content">
+    <div class="card">
+      <h2>📋 Sync History</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Source</th>
+            <th>Rows Added</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody id="sync-logs">
+          <tr>
+            <td colspan="6"
+                style="text-align:center;
+                       padding:20px;">
+              Loading...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Auto refresh every 30 seconds
+  setInterval(loadSources, 30000)
+
+  window.onload = function() {
+    loadSources()
+    loadWebhookLogs()
+    loadSyncLogs()
+    updateWebhookUrl()
+  }
+
+  function showTab(name, event) {
+    document.querySelectorAll('.tab-content')
+      .forEach(t => t.classList.remove('active'))
+    document.querySelectorAll('.tab')
+      .forEach(t => t.classList.remove('active'))
+    document.getElementById('tab-' + name)
+      .classList.add('active')
+    if (event && event.target)
+      event.target.classList.add('active')
+
+    if (name === 'webhook') loadWebhookLogs()
+    if (name === 'logs')    loadSyncLogs()
+  }
+
+  function updateWebhookUrl() {
+    document.getElementById('webhook-url')
+      .textContent =
+        window.location.origin + '/webhook/receive'
+  }
+
+  async function loadSources() {
+    try {
+      const res  = await fetch('/sync/sources')
+      const data = await res.json()
+      const sources = data.sources || []
+
+      // Update stats
+      document.getElementById('total-sources')
+        .textContent = sources.length
+      document.getElementById('active-sources')
+        .textContent = sources.filter(
+          s => s.last_status === 'success').length
+      document.getElementById('failed-sources')
+        .textContent = sources.filter(
+          s => s.last_status === 'failed').length
+      document.getElementById('total-rows')
+        .textContent = sources.reduce(
+          (sum, s) => sum +
+          (parseInt(s.last_row_count) || 0), 0
+        ).toLocaleString()
+
+      // Render source cards
+      const grid = document.getElementById(
+        'sources-grid')
+
+      if (sources.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column:1/-1;
+                      text-align:center;
+                      padding:40px;color:#64748b;">
+            <div style="font-size:32px;
+                        margin-bottom:12px;">📊</div>
+            <div>No data sources configured yet.</div>
+            <div style="font-size:12px;margin-top:8px;">
+              Add a Google Sheet or configure
+              a webhook to get started.
+            </div>
+          </div>`
+        return
+      }
+
+      grid.innerHTML = sources.map(s => `
+        <div class="source-card">
+          <div class="source-header">
+            <div class="source-name">
+              ${s.source_name}
+            </div>
+            <span class="source-type
+              type-${s.source_type}">
+              ${s.source_type.replace('_', ' ')}
+            </span>
+          </div>
+          <div class="source-stats">
+            <div class="stat">
+              <div class="stat-val">
+                ${parseInt(s.last_row_count || 0)
+                  .toLocaleString()}
+              </div>
+              <div class="stat-lbl">Rows</div>
+            </div>
+            <div class="stat">
+              <div class="stat-val"
+                   style="font-size:12px;">
+                ${s.last_sync
+                  ? timeSince(s.last_sync)
+                  : 'Never'}
+              </div>
+              <div class="stat-lbl">Last Sync</div>
+            </div>
+          </div>
+          <div style="display:flex;
+                      justify-content:space-between;
+                      align-items:center;">
+            <span class="status-badge
+              status-${s.last_status || 'pending'}">
+              ${s.last_status || 'pending'}
+            </span>
+            <span style="color:#64748b;font-size:11px;">
+              → ${s.table_name}
+            </span>
+          </div>
+          ${s.error_message
+            ? `<div style="margin-top:8px;font-size:11px;
+                           color:#f87171;">
+                 ⚠️ ${s.error_message.substring(0,60)}
+               </div>`
+            : ''}
+          <button class="sync-btn"
+                  onclick="syncNow(
+                    '${s.source_name}', this)">
+            🔄 Sync Now
+          </button>
+        </div>
+      `).join('')
+
+    } catch(e) {
+      console.error('Load sources error:', e)
+    }
+  }
+
+  async function syncNow(sourceName, btn) {
+    btn.disabled    = true
+    btn.textContent = '⏳ Syncing...'
+
+    try {
+      const res  = await fetch('/sync/trigger', {
+        method:  'POST',
+        headers: {'Content-Type':'application/json'},
+        body:    JSON.stringify({
+          source_name: sourceName
+        })
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        btn.textContent = '✅ Synced!'
+        btn.style.background = '#059669'
+        setTimeout(() => {
+          btn.textContent = '🔄 Sync Now'
+          btn.style.background = ''
+          btn.disabled = false
+          loadSources()
+        }, 2000)
+      } else {
+        btn.textContent = '❌ Failed'
+        btn.style.background = '#dc2626'
+        setTimeout(() => {
+          btn.textContent = '🔄 Sync Now'
+          btn.style.background = ''
+          btn.disabled = false
+        }, 2000)
+      }
+    } catch(e) {
+      btn.textContent = '❌ Error'
+      btn.disabled    = false
+    }
+  }
+
+  async function refreshAll() {
+    const res  = await fetch('/sync/trigger_all', {
+      method: 'POST'
+    })
+    const data = await res.json()
+    alert(`Synced ${data.synced} sources`)
+    loadSources()
+  }
+
+  async function addGoogleSheet() {
+    const name     = document.getElementById(
+      'sheet-name').value
+    const table    = document.getElementById(
+      'sheet-table').value
+    const url      = document.getElementById(
+      'sheet-url').value
+    const interval = document.getElementById(
+      'sheet-interval').value
+    const msg      = document.getElementById(
+      'sheet-msg')
+
+    if (!name || !table || !url) {
+      msg.style.color = '#f87171'
+      msg.textContent = 'Please fill all fields'
+      return
+    }
+
+    const res  = await fetch('/sync/add_sheet', {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    JSON.stringify({
+        source_name:   name,
+        table_name:    table,
+        sheet_url:     url,
+        sync_interval: parseInt(interval)
+      })
+    })
+    const data = await res.json()
+
+    if (data.success) {
+      msg.style.color = '#34d399'
+      msg.textContent =
+        '✅ Sheet connected! Syncing now...'
+      loadSources()
+    } else {
+      msg.style.color = '#f87171'
+      msg.textContent = '❌ ' + data.error
+    }
+  }
+
+  async function generateToken() {
+    const name = document.getElementById(
+      'token-source-name').value
+    if (!name) return
+
+    const res  = await fetch('/sync/generate_token',{
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    JSON.stringify({source_name: name})
+    })
+    const data = await res.json()
+
+    document.getElementById('token-value')
+      .textContent = data.token
+    document.getElementById('token-result')
+      .style.display = 'block'
+  }
+
+  function copyToken() {
+    const token = document.getElementById(
+      'token-value').textContent
+    navigator.clipboard.writeText(token)
+    alert('Token copied!')
+  }
+
+  async function loadWebhookLogs() {
+    const res  = await fetch('/sync/webhook_logs')
+    const data = await res.json()
+    const tbody = document.getElementById(
+      'webhook-logs')
+
+    if (!data.logs || data.logs.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="6" ' +
+        'style="text-align:center;padding:20px;' +
+        'color:#64748b;">No webhook events yet' +
+        '</td></tr>'
+      return
+    }
+
+    tbody.innerHTML = data.logs.map(log => `
+      <tr>
+        <td>${log.received_at}</td>
+        <td><strong>${log.source_name}</strong></td>
+        <td style="color:#60a5fa;">
+          ${log.table_name}
+        </td>
+        <td>${log.rows_received}</td>
+        <td>
+          <span style="font-size:11px;padding:2px 8px;
+            border-radius:10px;
+            background:${
+              log.status === 'success'
+              ? '#1a3a2a' : '#3a1a1a'};
+            color:${
+              log.status === 'success'
+              ? '#34d399' : '#f87171'};">
+            ${log.status}
+          </span>
+        </td>
+        <td style="color:#64748b;">
+          ${log.ip_address || '-'}
+        </td>
+      </tr>
+    `).join('')
+  }
+
+  async function loadSyncLogs() {
+    const res  = await fetch('/sync/logs')
+    const data = await res.json()
+    const tbody = document.getElementById('sync-logs')
+
+    if (!data.logs || data.logs.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="6" ' +
+        'style="text-align:center;padding:20px;' +
+        'color:#64748b;">No sync logs yet</td></tr>'
+      return
+    }
+
+    tbody.innerHTML = data.logs.map(log => `
+      <tr>
+        <td>${log.synced_at}</td>
+        <td><strong>${log.source_name}</strong></td>
+        <td style="color:#34d399;">
+          ${log.rows_added}
+        </td>
+        <td>
+          <span style="font-size:11px;padding:2px 8px;
+            border-radius:10px;
+            background:${
+              log.status === 'success'
+              ? '#1a3a2a' : '#3a1a1a'};
+            color:${
+              log.status === 'success'
+              ? '#34d399' : '#f87171'};">
+            ${log.status}
+          </span>
+        </td>
+        <td style="color:#64748b;">
+          ${log.duration_ms || 0}ms
+        </td>
+        <td style="color:#f87171;font-size:11px;">
+          ${log.error
+            ? log.error.substring(0, 50) : '-'}
+        </td>
+      </tr>
+    `).join('')
+  }
+
+  function timeSince(dateStr) {
+    const now  = new Date()
+    const then = new Date(dateStr)
+    const diff = Math.floor(
+      (now - then) / 1000)
+
+    if (diff < 60)   return diff + 's ago'
+    if (diff < 3600) return Math.floor(
+      diff/60) + 'm ago'
+    if (diff < 86400) return Math.floor(
+      diff/3600) + 'h ago'
+    return Math.floor(diff/86400) + 'd ago'
+  }
+</script>
+</html>

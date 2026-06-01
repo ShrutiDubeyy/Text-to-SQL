@@ -10,6 +10,17 @@ import json
 import os
 import time
 
+from rag_engine import rag
+from sync_manager import sync_manager
+from sheets_connector import sheets
+from webhook_handler import webhook_handler
+
+from analytics_engine import analytics
+from alert_engine import alert_engine
+from proactive_analyst import proactive_analyst
+from report_engine import report_engine
+
+
 from auth import (User, get_user_by_username, get_user_by_id,
                   create_user, bcrypt, get_all_users,
                   update_user, delete_user, build_user_object,
@@ -426,6 +437,40 @@ def chat():
                 "badge":     "💬 1 call",
                 "protected": True
             })
+        
+            # Check if it's a report request
+            report_keywords = [
+                'generate report', 'create report',
+                'weekly report', 'monthly report',
+                'daily report', 'sales report'
+            ]
+            question_lower = user_question.lower()
+
+            if any(kw in question_lower
+                for kw in report_keywords):
+                if 'weekly' in question_lower:
+                    rtype = 'weekly'
+                elif 'monthly' in question_lower:
+                    rtype = 'monthly'
+                else:
+                    rtype = 'daily'
+
+                html = report_engine.generate_report(
+                    rtype, current_user.id)
+                report_url = f"/report/{rtype}"
+
+                return jsonify({
+                    "answer": (
+                        f"I've generated your {rtype} report! "
+                        f"[View Report]({report_url})"
+                    ),
+                    "sql":       None,
+                    "row_count": 0,
+                    "intent":    "REPORT",
+                    "followups": [],
+                    "chart":     None,
+                    "report_url": report_url
+                })
 
         # ── STEP 4: Validate SQL ───────────────────────────────
         if not sql_query:
@@ -520,6 +565,10 @@ def chat():
                 "followups": followups,
                 "chart":     None
             })
+        
+        # Save successful Q+SQL pair for future RAG use
+        rag.save_example(user_question, sql_query)
+        rag.increment_use_count(user_question)
 
         # ── STEP 8: Format answer ──────────────────────────────
         answer = _format_simple_result(
@@ -703,6 +752,364 @@ def _build_chart(question, results, columns):
     }
 
 
+@app.route("/admin/indexes")
+@login_required
+@admin_required
+def index_report():
+    from auto_indexer import auto_indexer
+    indexes     = auto_indexer.get_index_report()
+    clean       = []
+    for idx in indexes:
+        clean.append({
+            k: str(v) if v is not None else ''
+            for k, v in idx.items()
+        })
+    return jsonify({"indexes": clean})
+
+
+# ── Sync Routes ────────────────────────────────────────────────
+
+@app.route("/sync")
+@login_required
+@admin_required
+def sync_dashboard():
+    return render_template("sync.html")
+
+
+@app.route("/sync/sources")
+@login_required
+@admin_required
+def sync_sources():
+    sources = sync_manager.get_all_sources()
+    return jsonify({"sources": sources})
+
+
+@app.route("/sync/logs")
+@login_required
+@admin_required
+def sync_logs():
+    logs = sync_manager.get_sync_logs(limit=50)
+    return jsonify({"logs": logs})
+
+
+@app.route("/sync/webhook_logs")
+@login_required
+@admin_required
+def sync_webhook_logs():
+    logs = webhook_handler.get_webhook_logs(limit=50)
+    return jsonify({"logs": logs})
+
+
+@app.route("/sync/add_sheet", methods=["POST"])
+@login_required
+@admin_required
+def sync_add_sheet():
+    data          = request.get_json()
+    source_name   = data.get("source_name")
+    table_name    = data.get("table_name")
+    sheet_url     = data.get("sheet_url")
+    sync_interval = data.get("sync_interval", 300)
+
+    if not all([source_name, table_name, sheet_url]):
+        return jsonify(
+            {"success": False,
+             "error": "Missing required fields"}
+        )
+
+    # Register source
+    sync_manager.add_source(
+        source_name, 'google_sheet',
+        table_name, sheet_url, sync_interval
+    )
+
+    # Try immediate sync
+    if sheets.is_available():
+        success, rows = sheets.sync_sheet(
+            sheet_url, table_name, source_name)
+        if success:
+            return jsonify({
+                "success": True,
+                "rows":    rows
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error":   "Sheet registered but sync "
+                           "failed. Check credentials."
+            })
+    else:
+        return jsonify({
+            "success": True,
+            "message": "Sheet registered. "
+                       "Add Google credentials "
+                       "to enable auto-sync."
+        })
+
+
+@app.route("/sync/trigger", methods=["POST"])
+@login_required
+@admin_required
+def sync_trigger():
+    data        = request.get_json()
+    source_name = data.get("source_name")
+
+    # Get source details
+    sources = sync_manager.get_all_sources()
+    source  = next(
+        (s for s in sources
+         if s['source_name'] == source_name),
+        None
+    )
+
+    if not source:
+        return jsonify(
+            {"success": False,
+             "error": "Source not found"})
+
+    if source['source_type'] == 'google_sheet':
+        if sheets.is_available():
+            success, rows = sheets.sync_sheet(
+                source['source_url'],
+                source['table_name'],
+                source_name
+            )
+            return jsonify({
+                "success": success,
+                "rows":    rows
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error":   "Google Sheets "
+                           "not configured"
+            })
+
+    return jsonify({"success": False,
+                    "error": "Unknown source type"})
+
+
+@app.route("/sync/trigger_all", methods=["POST"])
+@login_required
+@admin_required
+def sync_trigger_all():
+    if sheets.is_available():
+        sheets.sync_all_due()
+    return jsonify({"success": True, "synced": 1})
+
+
+@app.route("/sync/generate_token", methods=["POST"])
+@login_required
+@admin_required
+def sync_generate_token():
+    data        = request.get_json()
+    source_name = data.get("source_name")
+    token = webhook_handler.generate_webhook_token(
+        source_name)
+    return jsonify({"token": token})
+
+
+# ── Webhook Receiver (Public — no login needed) ────────────────
+
+@app.route("/webhook/receive", methods=["POST"])
+def webhook_receive():
+    """
+    Public endpoint for external systems.
+    No login needed — uses token authentication.
+    """
+    try:
+        data        = request.get_json()
+        source_name = data.get("source_name")
+        table_name  = data.get("table_name")
+        token       = data.get("token")
+        payload     = data.get("data")
+        ip_address  = request.remote_addr
+
+        if not all([source_name,
+                    table_name, payload]):
+            return jsonify(
+                {"error": "Missing required fields"}
+            ), 400
+
+        success, message = \
+            webhook_handler.process_webhook(
+                source_name, table_name,
+                payload, token, ip_address
+            )
+
+        if success:
+            return jsonify({
+                "success": True,
+                "message": message
+            })
+        else:
+            return jsonify(
+                {"error": message}), 400
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ── Dashboard ──────────────────────────────────────
+
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    return render_template("dashboard.html",
+        username=current_user.username)
+
+@app.route("/api/dashboard")
+@login_required
+def api_dashboard():
+    data = analytics.get_dashboard_data()
+    # Convert Decimal to float for JSON
+    import json
+    from decimal import Decimal
+    def convert(obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        raise TypeError
+    return app.response_class(
+        response=json.dumps(data, default=convert),
+        mimetype='application/json'
+    )
+
+# ── Briefing ───────────────────────────────────────
+
+@app.route("/briefing")
+@login_required
+def briefing():
+    briefing_data = proactive_analyst\
+        .get_latest_briefing()
+    if not briefing_data:
+        # Generate one if none exists
+        result = proactive_analyst\
+            .generate_daily_briefing()
+        briefing_data = {
+            'full_report': result['html'],
+            'briefing_date': 'Today'
+        }
+    return briefing_data['full_report']
+
+@app.route("/api/generate_briefing",
+           methods=["POST"])
+@login_required
+@admin_required
+def generate_briefing():
+    result = proactive_analyst\
+        .generate_daily_briefing()
+    return jsonify({"success": True})
+
+# ── Reports ────────────────────────────────────────
+
+@app.route("/report/<report_type>")
+@login_required
+def generate_report(report_type):
+    html = report_engine.generate_report(
+        report_type, current_user.id)
+    return html
+
+@app.route("/api/reports")
+@login_required
+def api_reports():
+    reports = report_engine.get_report_history(
+        current_user.id)
+    return jsonify({"reports": reports})
+
+# ── Alerts ─────────────────────────────────────────
+
+@app.route("/api/alerts")
+@login_required
+def api_alerts():
+    alerts = alert_engine.get_alerts(
+        current_user.id)
+    return jsonify({"alerts": alerts})
+
+@app.route("/api/alerts/create",
+           methods=["POST"])
+@login_required
+def api_create_alert():
+    data = request.get_json()
+    success = alert_engine.add_alert(
+        user_id     = current_user.id,
+        alert_name  = data.get('alert_name'),
+        metric      = data.get('metric'),
+        operator    = data.get('operator'),
+        threshold   = float(data.get(
+            'threshold', 0)),
+        time_window = data.get(
+            'time_window', 'today'),
+        email       = data.get('email',
+            current_user.username)
+    )
+    return jsonify({"success": success})
+
+@app.route("/api/alerts/delete/<int:alert_id>",
+           methods=["DELETE"])
+@login_required
+def api_delete_alert(alert_id):
+    success = alert_engine.delete_alert(alert_id)
+    return jsonify({"success": success})
+
+@app.route("/api/alert_history")
+@login_required
+def api_alert_history():
+    history = alert_engine.get_alert_history()
+    return jsonify({"history": history})
+
+# ── Forecast ───────────────────────────────────────
+
+@app.route("/api/forecast")
+@login_required
+def api_forecast():
+    forecast = analytics.forecast_next_month()
+    return jsonify({"forecast": forecast})
+
+@app.route("/api/rag_stats")
+@login_required
+@admin_required
+def rag_stats():
+    from rag_engine import rag
+    stats = rag.get_stats()
+    return jsonify({"stats": stats})
+
 if __name__ == "__main__":
+    import os
+
+    # Only run startup tasks once
+    # (not in the reloader child process)
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        from rag_engine import rag
+        print("[RAG] Seeding examples...")
+        rag.seed_examples()
+
+        print("[App] 🔍 Running auto-indexer...")
+        from auto_indexer import auto_indexer
+        auto_indexer.auto_index_all_tables()
+
     start_scheduler()
-    app.run(debug=True)
+
+    debug = os.getenv(
+        'FLASK_DEBUG', 'true').lower() == 'true'
+
+    extra_files = [
+        'app.py', 'llm_chain.py', 'auth.py',
+        'db.py', 'schema_generator.py',
+        'sql_executor.py', 'data_loader.py',
+        'relationship_detector.py', 'memory.py',
+        'local_engine.py', 'rbac.py',
+        'security.py', 'data_shield.py',
+        'local_llm.py', 'optimizer.py',
+        'auto_indexer.py', 'sync_manager.py',
+        'sheets_connector.py',
+        'webhook_handler.py', 'rag_engine.py',
+        'analytics_engine.py', 'alert_engine.py',
+        'proactive_analyst.py', 'report_engine.py',
+    ]
+
+    app.run(
+        host='0.0.0.0',
+        port=5000,
+        debug=debug,
+        extra_files=extra_files,
+        use_reloader=True,
+        reloader_type='stat'
+    )

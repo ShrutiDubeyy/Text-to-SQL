@@ -94,12 +94,29 @@ def load_csv_to_mysql(filepath, table_name=None):
         _log_loaded_file(filepath, table_name, len(df))
 
         print(f"[Loader] ✅ Loaded {len(df)} rows → '{table_name}'")
+        
+        try:
+            from auto_indexer import auto_indexer
+            print(f"[Loader] Auto-indexing {table_name}....")
+            results = auto_indexer.auto_index_table(
+               table_name) 
+            created= sum(
+                1 for r in results
+                if r['status'] == 'created'
+            )
+            if created > 0:
+                print(f"[Loader] {created} indexes")
+                f"created automatically"
+        except Exception as e:
+            print(f"[Loader] Index warning : {e}")
+
         return True
 
     except Exception as e:
         print(f"[Loader] ❌ Error loading {filepath}: {e}")
         return False
-
+    
+    
 
 def load_multiple_files(file_table_map):
     """Load multiple files at once"""

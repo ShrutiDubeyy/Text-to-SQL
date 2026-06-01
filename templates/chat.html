@@ -124,6 +124,21 @@
     </div>
   </header>
 
+<a href="/dashboard"
+   style="color:#60a5fa;font-size:13px;
+          text-decoration:none;">
+  📊 Dashboard
+</a>  
+
+<!-- Add after Admin link -->
+{% if current_user.role == 'admin' %}
+<a href="/sync"
+   style="color:#34d399;font-size:13px;
+          text-decoration:none;">
+  🔄 Live Sync
+</a>
+{% endif %}  
+
   <div class="memory-bar">
     <div class="memory-left">
       <span class="memory-dot"></span>

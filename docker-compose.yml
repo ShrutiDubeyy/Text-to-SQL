@@ -1,0 +1,59 @@
+
+services:
+
+  # ── MySQL Database ─────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: chatbot_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE:      ${DB_NAME}
+    ports:
+      - "3307:3306"
+    volumes:
+      # Persist data even if container restarts
+      - mysql_data:/var/lib/mysql
+      # Auto run setup SQL on first start
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping",
+             "-h", "localhost",
+             "-u", "root",
+             "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  # ── Flask App ──────────────────────────────────
+  app:
+    build: .
+    container_name: chatbot_app
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      # These come from your .env file
+      GROQ_API_KEY:  ${GROQ_API_KEY}
+      DB_HOST:       db
+      DB_USER:       root
+      DB_PASSWORD:   ${DB_PASSWORD}
+      DB_NAME:       ${DB_NAME}
+      SECRET_KEY:    ${SECRET_KEY}
+    volumes:
+      # Mount data folder so CSV files persist
+      - ./data:/app/data
+      # Mount credentials for Google Sheets
+      - ./credentials:/app/credentials
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f",
+             "http://localhost:5000/login"]
+      interval: 30s
+      timeout:  10s
+      retries:  3
+
+volumes:
+  mysql_data:

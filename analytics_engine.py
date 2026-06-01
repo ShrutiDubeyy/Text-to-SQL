@@ -1,318 +1,377 @@
 import statistics
 from datetime import datetime, timedelta
+from db import get_connection
 
 
 class AnalyticsEngine:
     """
-    YOUR OWN analytics engine.
-    Does real data science without LLM.
+    Pure Python analytics — no LLM needed.
+    Runs real data analyst calculations.
     """
 
-    def analyze(self, results, columns, question):
+    def __init__(self, table='sales_order'):
+        self.table      = table
+        self.date_col   = 'orderdate'
+        self.amount_col = 'line_total'
+        self.product_col = 'product_description_index'
+        self.channel_col = 'channel'
+        self.customer_col = 'customer_name_index'
+
+    def _query(self, sql, params=None):
+        """Run SQL and return results"""
+        try:
+            conn   = get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(sql, params or ())
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            return rows
+        except Exception as e:
+            print(f"[Analytics] Query error: {e}")
+            return []
+
+    # ── METRIC 1: Revenue Today ──────────────────────
+
+    def get_revenue_today(self):
+        rows = self._query(f"""
+            SELECT COALESCE(SUM({self.amount_col}), 0)
+                   as revenue
+            FROM {self.table}
+            WHERE DATE({self.date_col}) = CURDATE()
+        """)
+        return float(rows[0]['revenue']) if rows else 0
+
+    def get_revenue_yesterday(self):
+        rows = self._query(f"""
+            SELECT COALESCE(SUM({self.amount_col}), 0)
+                   as revenue
+            FROM {self.table}
+            WHERE DATE({self.date_col}) =
+                  CURDATE() - INTERVAL 1 DAY
+        """)
+        return float(rows[0]['revenue']) if rows else 0
+
+    def get_revenue_this_week(self):
+        rows = self._query(f"""
+            SELECT COALESCE(SUM({self.amount_col}), 0)
+                   as revenue
+            FROM {self.table}
+            WHERE YEARWEEK({self.date_col}) =
+                  YEARWEEK(CURDATE())
+        """)
+        return float(rows[0]['revenue']) if rows else 0
+
+    def get_revenue_last_week(self):
+        rows = self._query(f"""
+            SELECT COALESCE(SUM({self.amount_col}), 0)
+                   as revenue
+            FROM {self.table}
+            WHERE YEARWEEK({self.date_col}) =
+                  YEARWEEK(CURDATE()) - 1
+        """)
+        return float(rows[0]['revenue']) if rows else 0
+
+    def get_revenue_this_month(self):
+        rows = self._query(f"""
+            SELECT COALESCE(SUM({self.amount_col}), 0)
+                   as revenue
+            FROM {self.table}
+            WHERE MONTH({self.date_col}) = MONTH(CURDATE())
+            AND   YEAR({self.date_col})  = YEAR(CURDATE())
+        """)
+        return float(rows[0]['revenue']) if rows else 0
+
+    # ── METRIC 2: Orders ─────────────────────────────
+
+    def get_orders_today(self):
+        rows = self._query(f"""
+            SELECT COUNT(*) as orders
+            FROM {self.table}
+            WHERE DATE({self.date_col}) = CURDATE()
+        """)
+        return int(rows[0]['orders']) if rows else 0
+
+    def get_orders_yesterday(self):
+        rows = self._query(f"""
+            SELECT COUNT(*) as orders
+            FROM {self.table}
+            WHERE DATE({self.date_col}) =
+                  CURDATE() - INTERVAL 1 DAY
+        """)
+        return int(rows[0]['orders']) if rows else 0
+
+    def get_avg_order_value(self):
+        rows = self._query(f"""
+            SELECT COALESCE(AVG({self.amount_col}), 0)
+                   as avg_value
+            FROM {self.table}
+            WHERE DATE({self.date_col}) >= 
+                  CURDATE() - INTERVAL 30 DAY
+        """)
+        return float(rows[0]['avg_value']) if rows else 0
+
+    # ── METRIC 3: Channel Performance ────────────────
+
+    def get_revenue_by_channel(self, days=30):
+        return self._query(f"""
+            SELECT {self.channel_col} as channel,
+                   SUM({self.amount_col}) as revenue,
+                   COUNT(*) as orders
+            FROM {self.table}
+            WHERE DATE({self.date_col}) >=
+                  CURDATE() - INTERVAL {days} DAY
+            GROUP BY {self.channel_col}
+            ORDER BY revenue DESC
+        """)
+
+    # ── METRIC 4: Top Products ────────────────────────
+
+    def get_top_products(self, limit=5, days=30):
+        return self._query(f"""
+            SELECT {self.product_col} as product,
+                   SUM({self.amount_col}) as revenue,
+                   COUNT(*) as orders
+            FROM {self.table}
+            WHERE DATE({self.date_col}) >=
+                  CURDATE() - INTERVAL {days} DAY
+            GROUP BY {self.product_col}
+            ORDER BY revenue DESC
+            LIMIT {limit}
+        """)
+
+    # ── METRIC 5: Daily Trend ─────────────────────────
+
+    def get_daily_trend(self, days=30):
+        return self._query(f"""
+            SELECT DATE({self.date_col}) as date,
+                   SUM({self.amount_col}) as revenue,
+                   COUNT(*) as orders
+            FROM {self.table}
+            WHERE DATE({self.date_col}) >=
+                  CURDATE() - INTERVAL {days} DAY
+            GROUP BY DATE({self.date_col})
+            ORDER BY date ASC
+        """)
+
+    # ── METRIC 6: Anomaly Detection ──────────────────
+
+    def detect_anomalies(self):
         """
-        Full analysis of query results.
-        Returns insights computed by YOUR code.
-        """
-        if not results or not columns:
-            return {}
-
-        analysis = {}
-
-        # Basic stats
-        analysis['basic'] = self._basic_stats(results, columns)
-
-        # Trend detection
-        analysis['trend'] = self._detect_trend(results, columns)
-
-        # Anomalies
-        analysis['anomalies'] = self._detect_anomalies(
-            results, columns
-        )
-
-        # Growth rate
-        analysis['growth'] = self._calculate_growth(
-            results, columns
-        )
-
-        # Smart insight
-        analysis['insight'] = self._generate_insight(
-            results, columns, question, analysis
-        )
-
-        return analysis
-
-    def _basic_stats(self, results, columns):
-        """YOUR statistical calculations"""
-        stats = {}
-
-        for i, col in enumerate(columns):
-            values = []
-            for row in results:
-                try:
-                    val = float(row[i])
-                    values.append(val)
-                except (ValueError, TypeError):
-                    pass
-
-            if values:
-                stats[col] = {
-                    'sum':    round(sum(values), 2),
-                    'avg':    round(statistics.mean(values), 2),
-                    'max':    round(max(values), 2),
-                    'min':    round(min(values), 2),
-                    'median': round(statistics.median(values), 2),
-                    'count':  len(values)
-                }
-
-                # Standard deviation if enough data
-                if len(values) > 1:
-                    stats[col]['std_dev'] = round(
-                        statistics.stdev(values), 2
-                    )
-
-        return stats
-
-    def _detect_trend(self, results, columns):
-        """
-        YOUR trend detection algorithm.
-        Looks at numeric progression in results.
-        """
-        if len(results) < 3:
-            return {'direction': 'insufficient_data'}
-
-        # Find numeric column
-        numeric_col_idx = None
-        for i, col in enumerate(columns):
-            try:
-                float(results[0][i])
-                numeric_col_idx = i
-                break
-            except (ValueError, TypeError):
-                pass
-
-        if numeric_col_idx is None:
-            return {'direction': 'no_numeric_data'}
-
-        values = []
-        for row in results:
-            try:
-                values.append(float(row[numeric_col_idx]))
-            except (ValueError, TypeError):
-                pass
-
-        if len(values) < 3:
-            return {'direction': 'insufficient_data'}
-
-        # YOUR trend algorithm
-        # Compare first half average vs second half average
-        mid = len(values) // 2
-        first_half_avg  = statistics.mean(values[:mid])
-        second_half_avg = statistics.mean(values[mid:])
-
-        if first_half_avg == 0:
-            return {'direction': 'stable'}
-
-        change_pct = (
-            (second_half_avg - first_half_avg) / first_half_avg
-        ) * 100
-
-        if change_pct > 10:
-            direction = 'upward'
-            emoji = '📈'
-        elif change_pct < -10:
-            direction = 'downward'
-            emoji = '📉'
-        else:
-            direction = 'stable'
-            emoji = '➡️'
-
-        return {
-            'direction':  direction,
-            'change_pct': round(change_pct, 1),
-            'emoji':      emoji,
-            'first_avg':  round(first_half_avg, 2),
-            'second_avg': round(second_half_avg, 2)
-        }
-
-    def _detect_anomalies(self, results, columns):
-        """
-        YOUR anomaly detection.
-        Uses standard deviation to find outliers.
+        Find unusual patterns using
+        standard deviation.
+        YOUR algorithm — no LLM.
         """
         anomalies = []
 
-        for i, col in enumerate(columns):
-            values = []
-            for row in results:
-                try:
-                    values.append(float(row[i]))
-                except (ValueError, TypeError):
-                    pass
+        # Get daily revenue for last 30 days
+        daily = self.get_daily_trend(30)
+        if len(daily) < 7:
+            return anomalies
 
-            if len(values) < 4:
-                continue
+        revenues = [float(d['revenue'])
+                    for d in daily]
 
-            mean   = statistics.mean(values)
-            stdev  = statistics.stdev(values)
+        if not revenues:
+            return anomalies
 
-            if stdev == 0:
-                continue
+        mean   = statistics.mean(revenues)
+        stdev  = statistics.stdev(revenues) \
+                 if len(revenues) > 1 else 0
 
-            # Flag values more than 2 standard deviations from mean
-            for j, val in enumerate(values):
-                z_score = abs((val - mean) / stdev)
-                if z_score > 2:
-                    anomalies.append({
-                        'column':  col,
-                        'value':   val,
-                        'row_idx': j,
-                        'z_score': round(z_score, 2),
-                        'label':   str(results[j][0])
-                    })
+        if stdev == 0:
+            return anomalies
+
+        for day in daily:
+            rev     = float(day['revenue'])
+            z_score = (rev - mean) / stdev
+
+            if abs(z_score) > 2:
+                anomalies.append({
+                    'date':    str(day['date']),
+                    'revenue': rev,
+                    'z_score': round(z_score, 2),
+                    'type': 'spike'
+                             if z_score > 0
+                             else 'drop',
+                    'message': (
+                        f"Revenue on {day['date']} "
+                        f"was {'above' if z_score > 0 else 'below'} "
+                        f"normal by "
+                        f"{abs(z_score):.1f} std deviations"
+                    )
+                })
 
         return anomalies
 
-    def _calculate_growth(self, results, columns):
+    # ── METRIC 7: Period Comparison ───────────────────
+
+    def compare_periods(self, period='week'):
         """
-        YOUR growth rate calculation.
-        Compares first vs last value.
+        Compare current period vs previous.
+        Returns change percentage.
         """
-        if len(results) < 2:
+        if period == 'week':
+            current  = self.get_revenue_this_week()
+            previous = self.get_revenue_last_week()
+        elif period == 'month':
+            current  = self.get_revenue_this_month()
+            previous = self._get_last_month_revenue()
+        else:
+            current  = self.get_revenue_today()
+            previous = self.get_revenue_yesterday()
+
+        if previous == 0:
+            return {
+                'current':  current,
+                'previous': previous,
+                'change':   0,
+                'direction': 'neutral'
+            }
+
+        change = ((current - previous) / previous) * 100
+
+        return {
+            'current':   round(current, 2),
+            'previous':  round(previous, 2),
+            'change':    round(change, 1),
+            'direction': 'up' if change > 0
+                         else 'down'
+        }
+
+    def _get_last_month_revenue(self):
+        rows = self._query(f"""
+            SELECT COALESCE(SUM({self.amount_col}), 0)
+                   as revenue
+            FROM {self.table}
+            WHERE MONTH({self.date_col}) =
+                  MONTH(CURDATE() - INTERVAL 1 MONTH)
+            AND   YEAR({self.date_col}) =
+                  YEAR(CURDATE() - INTERVAL 1 MONTH)
+        """)
+        return float(rows[0]['revenue']) if rows else 0
+
+    # ── METRIC 8: Forecast ────────────────────────────
+
+    def forecast_next_month(self):
+        """
+        Simple linear regression forecast.
+        YOUR math — no LLM or ML library.
+        """
+        # Get last 6 months of revenue
+        rows = self._query(f"""
+            SELECT
+                YEAR({self.date_col})  as year,
+                MONTH({self.date_col}) as month,
+                SUM({self.amount_col}) as revenue
+            FROM {self.table}
+            GROUP BY
+                YEAR({self.date_col}),
+                MONTH({self.date_col})
+            ORDER BY year ASC, month ASC
+            LIMIT 12
+        """)
+
+        if len(rows) < 3:
             return None
 
-        for i, col in enumerate(columns):
-            try:
-                first = float(results[0][i])
-                last  = float(results[-1][i])
+        values = [float(r['revenue']) for r in rows]
+        n      = len(values)
 
-                if first == 0:
-                    continue
+        # Linear regression
+        x_mean = (n - 1) / 2
+        y_mean = statistics.mean(values)
 
-                growth = ((last - first) / abs(first)) * 100
-                return {
-                    'column':     col,
-                    'first':      first,
-                    'last':       last,
-                    'growth_pct': round(growth, 1),
-                    'grew':       growth > 0
-                }
-            except (ValueError, TypeError):
-                pass
+        numerator   = sum(
+            (i - x_mean) * (values[i] - y_mean)
+            for i in range(n)
+        )
+        denominator = sum(
+            (i - x_mean) ** 2 for i in range(n)
+        )
 
-        return None
+        if denominator == 0:
+            return None
 
-    def _generate_insight(self, results, columns,
-                          question, analysis):
+        slope     = numerator / denominator
+        intercept = y_mean - slope * x_mean
+
+        # Forecast next period
+        forecast = slope * n + intercept
+
+        # Confidence range (±1 std dev)
+        residuals = [
+            values[i] - (slope * i + intercept)
+            for i in range(n)
+        ]
+        std_dev = statistics.stdev(residuals) \
+                  if len(residuals) > 1 else 0
+
+        return {
+            'forecast':   round(max(forecast, 0), 2),
+            'low':        round(max(
+                              forecast - std_dev, 0
+                          ), 2),
+            'high':       round(
+                              forecast + std_dev, 2
+                          ),
+            'trend':      'up' if slope > 0 else 'down',
+            'slope':      round(slope, 2),
+            'confidence': round(
+                (1 - std_dev / y_mean) * 100, 1
+            ) if y_mean > 0 else 0
+        }
+
+    # ── FULL DASHBOARD DATA ───────────────────────────
+
+    def get_dashboard_data(self):
         """
-        YOUR OWN insight generator.
-        Uses templates + computed stats.
-        No LLM needed.
+        Get ALL metrics for dashboard in one call.
         """
-        q = question.lower()
-        parts = []
+        revenue_today     = self.get_revenue_today()
+        revenue_yesterday = self.get_revenue_yesterday()
+        orders_today      = self.get_orders_today()
+        orders_yesterday  = self.get_orders_yesterday()
+        avg_order         = self.get_avg_order_value()
 
-        # Basic count insight
-        row_count = len(results)
-        if row_count == 1:
-            parts.append(f"Found exactly 1 result.")
-        elif row_count <= 5:
-            parts.append(f"Found {row_count} results.")
-        else:
-            parts.append(f"Analyzed {row_count} data points.")
-
-        # Numeric insights
-        basic = analysis.get('basic', {})
-        for col, stats in basic.items():
-            if 'revenue' in col or 'total' in col or 'sales' in col:
-                parts.append(
-                    f"Total {col}: "
-                    f"${stats['sum']:,.2f}"
-                )
-                parts.append(
-                    f"Average: ${stats['avg']:,.2f}"
-                )
-                if row_count > 1:
-                    parts.append(
-                        f"Highest: ${stats['max']:,.2f}, "
-                        f"Lowest: ${stats['min']:,.2f}"
-                    )
-
-        # Trend insight
-        trend = analysis.get('trend', {})
-        direction = trend.get('direction', '')
-        if direction == 'upward':
-            parts.append(
-                f"{trend.get('emoji','')} Growing trend! "
-                f"Up {trend.get('change_pct',0)}% "
-                f"from first to second half."
-            )
-        elif direction == 'downward':
-            parts.append(
-                f"{trend.get('emoji','')} Declining trend. "
-                f"Down {abs(trend.get('change_pct',0))}% "
-                f"from first to second half."
+        # Calculate changes
+        rev_change = 0
+        if revenue_yesterday > 0:
+            rev_change = (
+                (revenue_today - revenue_yesterday)
+                / revenue_yesterday * 100
             )
 
-        # Anomaly insight
-        anomalies = analysis.get('anomalies', [])
-        if anomalies:
-            a = anomalies[0]
-            parts.append(
-                f"⚠️ Unusual value detected: "
-                f"{a['label']} has {a['column']} = "
-                f"{a['value']:,.2f} "
-                f"(significantly different from average)"
+        ord_change = 0
+        if orders_yesterday > 0:
+            ord_change = (
+                (orders_today - orders_yesterday)
+                / orders_yesterday * 100
             )
 
-        # Growth insight
-        growth = analysis.get('growth')
-        if growth:
-            direction_word = "grew" if growth['grew'] else "declined"
-            parts.append(
-                f"Overall {direction_word} by "
-                f"{abs(growth['growth_pct'])}% "
-                f"from {growth['first']:,.2f} "
-                f"to {growth['last']:,.2f}"
+        return {
+            'kpis': {
+                'revenue_today':     revenue_today,
+                'revenue_yesterday': revenue_yesterday,
+                'revenue_change':    round(rev_change, 1),
+                'orders_today':      orders_today,
+                'orders_yesterday':  orders_yesterday,
+                'orders_change':     round(ord_change, 1),
+                'avg_order_value':   round(avg_order, 2),
+                'revenue_this_week': self.get_revenue_this_week(),
+                'revenue_this_month': self.get_revenue_this_month(),
+            },
+            'by_channel':   self.get_revenue_by_channel(),
+            'top_products': self.get_top_products(5),
+            'daily_trend':  self.get_daily_trend(30),
+            'anomalies':    self.detect_anomalies(),
+            'forecast':     self.forecast_next_month(),
+            'week_compare': self.compare_periods('week'),
+            'generated_at': datetime.now().strftime(
+                '%Y-%m-%d %H:%M:%S'
             )
+        }
 
-        return " ".join(parts) if parts else "Analysis complete."
 
-    def format_value(self, value, column_name):
-        """
-        YOUR own smart number formatter.
-        No LLM needed.
-        """
-        if value is None:
-            return 'N/A'
-
-        col = str(column_name).lower()
-
-        try:
-            num = float(value)
-            if (
-                'revenue' in col or 'price' in col
-                or 'total' in col or 'sales' in col
-                or 'cost' in col or 'amount' in col
-                or 'budget' in col
-            ):
-                return f"${num:,.2f}"
-
-            if 'percent' in col or 'rate' in col or '%' in col:
-                return f"{num:.1f}%"
-
-            if (
-                'count' in col or 'quantity' in col
-                or 'orders' in col or 'number' in col
-            ):
-                return f"{int(num):,}"
-
-            if num >= 1_000_000:
-                return f"{num/1_000_000:.1f}M"
-
-            if num >= 1_000:
-                return f"{num:,.0f}"
-
-            return f"{num:.2f}"
-
-        except (ValueError, TypeError):
-            return str(value)
+# Global instance
+analytics = AnalyticsEngine()

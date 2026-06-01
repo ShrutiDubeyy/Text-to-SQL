@@ -1,0 +1,16 @@
+# Never include in Docker image
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+*.md
+.DS_Store
+Thumbs.db
+
+# Keep data folder structure but not files
+data/*.csv
+data/*.xlsx
+data/*.xls

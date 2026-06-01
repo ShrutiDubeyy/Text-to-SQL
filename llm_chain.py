@@ -67,97 +67,88 @@ def _format_history(chat_history):
 
 def process_question_complete(user_question, schema,
                                chat_history=None):
-    """
-    ONE single LLM call that does everything:
-    - Detects intent
-    - Generates SQL if needed
-    - Generates casual response if needed
-    - Generates follow-up questions
-    Replaces 4 separate calls with 1.
-    """
+    from local_llm import (call_with_fallback,
+                            is_ollama_running)
+    from data_shield import shield
+    from rag_engine import rag
+
     history_str = _format_history(chat_history or [])
 
-    prompt = f"""You are an expert AI data analyst assistant.
+    # ── RAG: Find similar past queries ───────────────
+    similar = rag.find_similar(user_question, top_k=3)
+    rag_context = rag.format_examples_for_prompt(
+        similar)
+
+    print(f"[RAG] Found {len(similar)} "
+          f"similar examples")
+
+    if is_ollama_running():
+        safe_schema = schema
+    else:
+        safe_schema = shield.anonymize_schema(schema)
+
+    prompt = f"""You are an expert AI data analyst.
 
 Database schema:
-{schema}
+{safe_schema}
+
+{rag_context}
 
 Previous conversation:
 {history_str}
 
 User message: "{user_question}"
 
-Respond with ONLY a JSON object in this exact format:
-
+Respond with ONLY a JSON object:
 {{
     "intent": "DATA_QUESTION or CASUAL_CHAT or HELP_REQUEST or SCHEMA_REQUEST or OUT_OF_SCOPE",
-    "sql": "SELECT query here or null if not a data question",
-    "casual_response": "friendly response if casual/help/schema or null",
-    "followups": ["question 1", "question 2", "question 3"]
+    "sql": "SELECT query or null",
+    "casual_response": "response or null",
+    "followups": ["q1", "q2", "q3"]
 }}
 
-Rules for intent:
-- DATA_QUESTION: wants data, numbers, insights from database
-- CASUAL_CHAT: greeting, thanks, small talk, acknowledgement
-- HELP_REQUEST: asking what you can do or how to use
-- SCHEMA_REQUEST: asking what tables or data exists
-- OUT_OF_SCOPE: completely unrelated to data
+Use the similar past queries as reference
+for SQL style and patterns.
+Return ONLY JSON:"""
 
-Rules for sql:
-- Only for DATA_QUESTION intent
-- Valid MySQL SELECT query only
-- Use exact column and table names from schema
-- No markdown, no backticks, no comments
-- Add LIMIT 100 unless aggregating with SUM/COUNT/AVG
-- null for all other intents
+    result, source = call_with_fallback(prompt)
 
-Rules for casual_response:
-- For CASUAL_CHAT: warm friendly reply in 1-2 sentences
-- For HELP_REQUEST: list 5-6 example questions they can ask
-- For SCHEMA_REQUEST: explain what tables exist in simple terms
-- For OUT_OF_SCOPE: politely redirect to data questions
-- null for DATA_QUESTION
+    del prompt
+    del safe_schema
+    import gc
+    gc.collect()
 
-Rules for followups:
-- Always exactly 3 short relevant follow-up questions
-- Based on what was just asked
-- null is not allowed here always give 3
-
-Return ONLY the JSON. No explanation outside JSON."""
-
-    response = call_groq(
-        prompt,
-        system_message="You are a data analyst. Return only valid JSON."
-    )
-
-    # Clean response
-    response = response.replace(
-        "```json", "").replace("```", "").strip()
-
-    # Find JSON object
-    start = response.find('{')
-    end   = response.rfind('}') + 1
-    if start != -1 and end > start:
-        response = response[start:end]
-
-    try:
-        result = json.loads(response)
-        return result
-    except Exception as e:
-        print(f"[LLM] JSON parse error: {e}")
-        print(f"[LLM] Raw response: {response[:200]}")
-        # Fallback
+    if not result:
         return {
             "intent":          "DATA_QUESTION",
             "sql":             None,
             "casual_response": None,
-            "followups":       [
-                "What is the total revenue?",
-                "Show top 5 products",
-                "Which channel performs best?"
-            ]
+            "followups":       [],
+            "source":          source
         }
 
+    result = result.replace(
+        "```json", "").replace("```", "").strip()
+
+    start = result.find('{')
+    end   = result.rfind('}') + 1
+    if start != -1 and end > start:
+        result = result[start:end]
+
+    try:
+        parsed         = json.loads(result)
+        parsed['source'] = source
+        return parsed
+    except Exception as e:
+        print(f"[LLM] Parse error: {e}")
+        return {
+            "intent":          "DATA_QUESTION",
+            "sql":             None,
+            "casual_response": None,
+            "source":          source,
+            "followups":       []
+        }
+    
 
 def generate_sql(user_question, schema, chat_history=None):
     """
